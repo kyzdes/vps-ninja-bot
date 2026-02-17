@@ -1,0 +1,20 @@
+# VPS Ninja — Git Ignore
+
+# Config with secrets (NEVER commit!)
+skill/config/servers.json
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
