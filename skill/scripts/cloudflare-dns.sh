@@ -1,16 +1,22 @@
 #!/bin/bash
 # CloudFlare DNS API wrapper
 # Usage:
-#   cloudflare-dns.sh create <full-domain> <ip> [proxied=true]
+#   cloudflare-dns.sh create <full-domain> <ip> [proxied=true|--no-proxy]
 #   cloudflare-dns.sh delete <full-domain>
 #   cloudflare-dns.sh list   <zone-domain>
 #   cloudflare-dns.sh get    <full-domain>
 #
 # Examples:
-#   cloudflare-dns.sh create app.example.com 45.55.67.89
-#   cloudflare-dns.sh create app.example.com 45.55.67.89 false
+#   cloudflare-dns.sh create app.example.com 45.55.67.89           # proxied (default)
+#   cloudflare-dns.sh create app.example.com 45.55.67.89 true      # proxied
+#   cloudflare-dns.sh create app.example.com 45.55.67.89 false     # DNS-only
+#   cloudflare-dns.sh create app.example.com 45.55.67.89 --no-proxy  # DNS-only (alias)
 #   cloudflare-dns.sh delete app.example.com
 #   cloudflare-dns.sh list example.com
+#
+# The --no-proxy flag (or proxied=false) creates DNS records without CloudFlare proxy.
+# This is REQUIRED for Let's Encrypt HTTP challenge validation.
+# After certificate issuance, re-run with proxied=true to enable CDN/DDoS protection.
 #
 # Reads CloudFlare API token from config/servers.json
 # Exit codes: 0 = success, 1 = config error, 2 = API error
@@ -62,11 +68,24 @@ find_record() {
   cf_curl GET "zones/${zone_id}/dns_records?name=${record_name}&type=A" | jq -r '.result[0] // empty'
 }
 
+# Parse proxied argument: supports true, false, --no-proxy
+parse_proxied() {
+  local arg="${1:-true}"
+  case "$arg" in
+    --no-proxy|false|False|FALSE|no|No|NO)
+      echo "false"
+      ;;
+    *)
+      echo "true"
+      ;;
+  esac
+}
+
 case "$ACTION" in
   create)
     DOMAIN="${2:?Missing domain}"
     IP="${3:?Missing IP address}"
-    PROXIED="${4:-true}"
+    PROXIED=$(parse_proxied "${4:-true}")
 
     ZONE_DOMAIN=$(get_zone_domain "$DOMAIN")
     ZONE_ID=$(get_zone_id "$ZONE_DOMAIN")
@@ -82,13 +101,26 @@ case "$ACTION" in
     if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
       # Update existing record
       RECORD_ID=$(echo "$EXISTING" | jq -r '.id')
-      cf_curl PUT "zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
-        "{\"type\":\"A\",\"name\":\"$DOMAIN\",\"content\":\"$IP\",\"proxied\":$PROXIED,\"ttl\":1}"
+      RESULT=$(cf_curl PUT "zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
+        "{\"type\":\"A\",\"name\":\"$DOMAIN\",\"content\":\"$IP\",\"proxied\":$PROXIED,\"ttl\":1}")
     else
       # Create new record
-      cf_curl POST "zones/${ZONE_ID}/dns_records" \
-        "{\"type\":\"A\",\"name\":\"$DOMAIN\",\"content\":\"$IP\",\"proxied\":$PROXIED,\"ttl\":1}"
+      RESULT=$(cf_curl POST "zones/${ZONE_ID}/dns_records" \
+        "{\"type\":\"A\",\"name\":\"$DOMAIN\",\"content\":\"$IP\",\"proxied\":$PROXIED,\"ttl\":1}")
     fi
+
+    # Check for API errors
+    SUCCESS=$(echo "$RESULT" | jq -r '.success // false')
+    if [ "$SUCCESS" != "true" ]; then
+      ERRORS=$(echo "$RESULT" | jq -r '.errors[0].message // "Unknown error"')
+      echo "{\"error\": \"CloudFlare API error: $ERRORS\"}" >&2
+      exit 2
+    fi
+
+    # Output result with proxy status
+    PROXY_STATUS="proxied"
+    [ "$PROXIED" = "false" ] && PROXY_STATUS="DNS-only (no proxy)"
+    echo "$RESULT" | jq --arg status "$PROXY_STATUS" '.result | {id, name, content, proxied, proxy_status: $status}'
     ;;
 
   delete)

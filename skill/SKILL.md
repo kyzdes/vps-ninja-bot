@@ -82,8 +82,8 @@ CONFIG_PATH="<skill-dir>/config/servers.json"
 
 | Скрипт | Использование |
 |:-------|:--------------|
-| `dokploy-api.sh` | `bash <script> <server-name> <METHOD> <endpoint> [json-body]` |
-| `cloudflare-dns.sh` | `bash <script> <action> [args...]` |
+| `dokploy-api.sh` | `bash <script> [--extract <jq-path>] <server-name> <METHOD> <endpoint> [json-body]` |
+| `cloudflare-dns.sh` | `bash <script> <action> [args...]` (create поддерживает `--no-proxy` для DNS-only записей) |
 | `ssh-exec.sh` | `bash <script> <server-name> <command>` или `bash <script> --password <pass> <ip> <command>` |
 | `wait-ready.sh` | `bash <script> <url> [timeout] [interval]` |
 

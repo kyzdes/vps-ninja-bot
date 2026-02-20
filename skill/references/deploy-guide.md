@@ -26,7 +26,18 @@ https://github.com/user/repo → https://github.com/user/repo
 
 Цель: Определить стек, порт, env-переменные, зависимости от БД — без участия пользователя.
 
-### 1.1 Клонирование репозитория
+### 1.1 Проверка доступности репозитория
+
+Перед клонированием проверь, приватный ли репозиторий:
+
+```bash
+# Проверить доступность через git ls-remote
+git ls-remote --exit-code "$GITHUB_URL" >/dev/null 2>&1
+```
+
+Если команда вернула ошибку → репо приватный или не существует. См. секцию "Приватные репозитории" ниже.
+
+### 1.2 Клонирование репозитория
 
 Создай временную директорию и клонируй репо:
 
@@ -43,7 +54,7 @@ git clone --depth 1 --branch master <url> "$TEMP_DIR"
 
 Если обе попытки провалились → спроси пользователя: "Какую ветку деплоить?"
 
-### 1.2 Определение стека
+### 1.3 Определение стека
 
 Прочитай файл `references/stack-detection.md` и примени правила оттуда.
 
@@ -61,6 +72,8 @@ elif Gemfile exists → STACK=ruby, BUILD_TYPE=nixpacks
 elif pom.xml or build.gradle exists → STACK=java, BUILD_TYPE=nixpacks
 else → STACK=unknown, ask user
 ```
+
+> **Примечание:** Если есть И Dockerfile, И docker-compose.yml — см. stack-detection.md для логики выбора. Спроси пользователя.
 
 **Для Node.js проектов** (если есть `package.json`):
 ```bash
@@ -80,7 +93,7 @@ elif requirements.txt has "fastapi" → FRAMEWORK=FastAPI, PORT=8000
 elif requirements.txt has "flask" → FRAMEWORK=Flask, PORT=5000
 ```
 
-### 1.3 Определение порта
+### 1.4 Определение порта
 
 Приоритет:
 
@@ -104,7 +117,7 @@ elif requirements.txt has "flask" → FRAMEWORK=Flask, PORT=5000
 
 Если не удалось определить → PORT=null, спросишь пользователя позже.
 
-### 1.4 Определение env-переменных
+### 1.5 Определение env-переменных
 
 Найди все env-переменные, которые ожидает приложение:
 
@@ -153,7 +166,7 @@ elif requirements.txt has "flask" → FRAMEWORK=Flask, PORT=5000
   - `NODE_ENV=production`, `RAILS_ENV=production`
 - **Опциональные** (есть значения по умолчанию в .env.example)
 
-### 1.5 Определение зависимостей от БД
+### 1.6 Определение зависимостей от БД
 
 **Признаки зависимости от PostgreSQL:**
 - `package.json` dependencies: `pg`, `prisma`, `drizzle-orm`, `typeorm`
@@ -172,7 +185,7 @@ elif requirements.txt has "flask" → FRAMEWORK=Flask, PORT=5000
 - `package.json` dependencies: `redis`, `ioredis`
 - `requirements.txt`: `redis`
 
-### 1.6 Результат анализа
+### 1.7 Результат анализа
 
 Собери всю информацию в структуру:
 
@@ -269,6 +282,8 @@ Env-переменные:
 
 Теперь у тебя есть вся информация. Выполни деплой через Dokploy API.
 
+> **Критически важно (v0.27+):** Все вызовы `*.create` требуют `environmentId`. Получай его из ответа `project.create`.
+
 ### 3.1 Создать проект в Dokploy
 
 Имя проекта = имя репозитория (из GitHub URL):
@@ -282,7 +297,9 @@ RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER" POST project.create '{
   "description": "Auto-deployed from '"$GITHUB_URL"'"
 }')
 
-PROJECT_ID=$(echo "$RESPONSE" | jq -r '.projectId')
+# v0.27+: ответ вложенный
+PROJECT_ID=$(echo "$RESPONSE" | jq -r '.project.projectId // .projectId')
+ENVIRONMENT_ID=$(echo "$RESPONSE" | jq -r '.environment.environmentId // empty')
 ```
 
 Если ошибка → покажи и останови.
@@ -297,6 +314,7 @@ DB_PASSWORD=$(openssl rand -base64 16)
 RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER" POST postgres.create '{
   "name": "'"$PROJECT_NAME-db"'",
   "projectId": "'"$PROJECT_ID"'",
+  "environmentId": "'"$ENVIRONMENT_ID"'",
   "databasePassword": "'"$DB_PASSWORD"'",
   "databaseUser": "'"$PROJECT_NAME"'",
   "databaseName": "'"$PROJECT_NAME"'"
@@ -324,6 +342,19 @@ INTERNAL_DB_URL=$(echo "$RESPONSE" | jq -r '.internalDatabaseUrl')
 ENV_AUTO["DATABASE_URL"]="$INTERNAL_DB_URL"
 ```
 
+Аналогично для Redis (если нужен):
+```bash
+RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER" POST redis.create '{
+  "name": "'"$PROJECT_NAME-redis"'",
+  "projectId": "'"$PROJECT_ID"'",
+  "environmentId": "'"$ENVIRONMENT_ID"'",
+  "databasePassword": "'"$(openssl rand -base64 16)"'"
+}')
+REDIS_ID=$(echo "$RESPONSE" | jq -r '.redisId')
+
+bash scripts/dokploy-api.sh "$SERVER" POST redis.deploy '{"redisId":"'"$REDIS_ID"'"}'
+```
+
 ### 3.3 Создать приложение в Dokploy
 
 **Для обычных проектов (не docker-compose):**
@@ -332,20 +363,19 @@ ENV_AUTO["DATABASE_URL"]="$INTERNAL_DB_URL"
 RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER" POST application.create '{
   "name": "'"$PROJECT_NAME"'",
   "projectId": "'"$PROJECT_ID"'",
-  "applicationStatus": "idle",
-  "sourceType": "github"
+  "environmentId": "'"$ENVIRONMENT_ID"'"
 }')
 
 APP_ID=$(echo "$RESPONSE" | jq -r '.applicationId')
 ```
 
-**Для docker-compose проектов:**
+**Для docker-compose проектов (из GitHub):**
 
 ```bash
 RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER" POST compose.create '{
   "name": "'"$PROJECT_NAME"'",
   "projectId": "'"$PROJECT_ID"'",
-  "composeType": "github"
+  "environmentId": "'"$ENVIRONMENT_ID"'"
 }')
 
 COMPOSE_ID=$(echo "$RESPONSE" | jq -r '.composeId')
@@ -368,9 +398,13 @@ bash scripts/dokploy-api.sh "$SERVER" POST application.update '{
 ```bash
 bash scripts/dokploy-api.sh "$SERVER" POST application.saveBuildType '{
   "applicationId": "'"$APP_ID"'",
-  "buildType": "'"$BUILD_TYPE"'"
+  "buildType": "'"$BUILD_TYPE"'",
+  "dockerContextPath": "",
+  "dockerBuildStage": ""
 }'
 ```
+
+> **Обязательно (v0.27+):** Поля `dockerContextPath` и `dockerBuildStage` обязательны. Для не-Docker билдов передавай пустые строки `""`.
 
 Где `$BUILD_TYPE` — один из: `nixpacks`, `dockerfile`, `railpack`, `heroku_buildpacks`, `paketo_buildpacks`, `static`.
 
@@ -400,15 +434,35 @@ bash scripts/dokploy-api.sh "$SERVER" POST application.saveEnvironment '{
 
 ### 3.7 Создать DNS-запись в CloudFlare (если указан домен)
 
+> **ВАЖНО: DNS должен быть настроен ДО добавления домена в Dokploy!**
+> Let's Encrypt ACME HTTP challenge требует, чтобы домен уже указывал на сервер.
+> Правильный порядок: DNS → подождать → Domain в Dokploy → Deploy.
+
 Если пользователь указал домен:
 
 ```bash
 SERVER_IP=$(jq -r ".servers.\"$SERVER\".host" config/servers.json)
 
-bash scripts/cloudflare-dns.sh create "$DOMAIN" "$SERVER_IP" true
+# Создать DNS без CloudFlare proxy (для Let's Encrypt HTTP challenge)
+bash scripts/cloudflare-dns.sh create "$DOMAIN" "$SERVER_IP" --no-proxy
 ```
 
+> Для Let's Encrypt используй `--no-proxy` (proxied=false), т.к. CloudFlare proxy перехватывает HTTP challenge и сертификат не выпустится. После успешного выпуска сертификата proxy можно включить обратно.
+
 Если ошибка (например, токен не настроен) → предупреди, но продолжи (DNS можно настроить позже вручную).
+
+**Подождать DNS propagation:**
+```bash
+echo "Ожидание DNS propagation (~30 секунд)..."
+sleep 30
+
+# Проверить что DNS указывает на наш IP
+RESOLVED_IP=$(dig +short "$DOMAIN" @1.1.1.1 | tail -1)
+if [ "$RESOLVED_IP" != "$SERVER_IP" ]; then
+  echo "DNS ещё не propagated ($RESOLVED_IP vs $SERVER_IP). Подождём ещё..."
+  sleep 30
+fi
+```
 
 ### 3.8 Добавить домен в Dokploy
 
@@ -443,10 +497,10 @@ while true; do
   STATUS=$(echo "$RESPONSE" | jq -r '.[0].status')
 
   if [ "$STATUS" = "done" ]; then
-    echo "✓ Билд завершён успешно"
+    echo "Билд завершён успешно"
     break
   elif [ "$STATUS" = "error" ]; then
-    echo "✗ Билд упал. Логи:"
+    echo "Билд упал. Логи:"
     DEPLOYMENT_ID=$(echo "$RESPONSE" | jq -r '.[0].deploymentId')
     bash scripts/dokploy-api.sh "$SERVER" GET "deployment.logsByDeployment?deploymentId=$DEPLOYMENT_ID" | tail -50
     exit 1
@@ -467,18 +521,43 @@ bash scripts/wait-ready.sh "https://$DOMAIN" 120 10
 
 Если успешно:
 ```
-✓ Приложение доступно: https://$DOMAIN
+Приложение доступно: https://$DOMAIN
 ```
 
 Если timeout:
 ```
-⚠️ Приложение не отвечает. Проверь логи: /vps logs $PROJECT_NAME
+Приложение не отвечает. Проверь логи: /vps logs $PROJECT_NAME
 ```
 
-### 3.12 Итоговый отчёт
+### 3.12 Предложить автодеплой
+
+После успешного деплоя спроси:
+```
+Настроить автодеплой при push в GitHub? (да/нет)
+```
+
+Если да:
+```bash
+# Включить autoDeploy
+bash scripts/dokploy-api.sh "$SERVER" POST application.update '{
+  "applicationId":"'"$APP_ID"'",
+  "autoDeploy":true
+}'
+
+# Получить webhook URL
+APP_INFO=$(bash scripts/dokploy-api.sh "$SERVER" GET "application.one?applicationId=$APP_ID")
+REFRESH_TOKEN=$(echo "$APP_INFO" | jq -r '.refreshToken')
+DOKPLOY_URL=$(jq -r ".servers.\"$SERVER\".dokploy_url" config/servers.json)
+
+echo "Webhook URL: $DOKPLOY_URL/api/deploy/$REFRESH_TOKEN"
+echo "Добавь в GitHub → Settings → Webhooks → Add webhook"
+echo "Content type: application/json, Events: Just the push event"
+```
+
+### 3.13 Итоговый отчёт
 
 ```
-✅ Деплой завершён!
+Деплой завершён!
 
 Проект: $PROJECT_NAME
 URL: https://$DOMAIN
@@ -488,7 +567,7 @@ URL: https://$DOMAIN
 Созданные ресурсы:
   - Приложение: $PROJECT_NAME ($BUILD_TYPE)
   - База данных: PostgreSQL ($PROJECT_NAME-db)
-  - DNS-запись: $DOMAIN → $SERVER_IP (CloudFlare Proxy)
+  - DNS-запись: $DOMAIN → $SERVER_IP (CloudFlare, proxy OFF)
   - SSL-сертификат: Let's Encrypt (автоматически)
 
 Env-переменные:
@@ -499,7 +578,156 @@ Env-переменные:
 Следующие шаги:
   - Проверь приложение: https://$DOMAIN
   - Логи: /vps logs $PROJECT_NAME
+  - Включить CloudFlare proxy: cloudflare-dns.sh create $DOMAIN $SERVER_IP true
   - Редеплой: /vps deploy $GITHUB_URL --domain $DOMAIN
+```
+
+---
+
+## Приватные репозитории
+
+Если `git ls-remote` или `git clone` не удаётся (репо приватный):
+
+### Вариант A (рекомендуемый): GitHub App интеграция в Dokploy
+
+Это лучший вариант — автодеплой работает из коробки, не нужны токены.
+
+```
+Репозиторий приватный. Рекомендуется настроить GitHub App интеграцию в Dokploy:
+
+1. Открой Dokploy UI → Settings → Server → GitHub
+2. Нажми "Install GitHub App"
+3. Выбери организацию/аккаунт и репозитории
+4. После установки приватные репо будут доступны напрямую
+```
+
+После настройки GitHub App:
+- `sourceType: "github"` работает с приватными репо
+- Автодеплой через GitHub App webhooks (не нужен отдельный webhook)
+- Для выбора репо используй owner/repo/branch прямо в Dokploy
+
+### Вариант B: GitHub Personal Access Token (Classic)
+
+Когда GitHub App невозможна (нет прав на установку):
+
+```
+Для доступа к приватному репозиторию нужен GitHub Personal Access Token:
+
+1. Перейди на github.com/settings/tokens
+2. "Generate new token (classic)"
+3. Установи scope: repo (Full control of private repositories)
+4. Скопируй токен и введи его сюда
+```
+
+После получения токена:
+```bash
+# Клонировать для анализа
+git clone --depth 1 "https://$GITHUB_PAT@github.com/$OWNER/$REPO.git" "$TEMP_DIR"
+
+# Настроить в Dokploy через customGitUrl
+bash scripts/dokploy-api.sh "$SERVER" POST application.update '{
+  "applicationId": "'"$APP_ID"'",
+  "sourceType": "github",
+  "customGitUrl": "https://'"$GITHUB_PAT"'@github.com/'"$OWNER"'/'"$REPO"'.git",
+  "branch": "'"$BRANCH"'"
+}'
+```
+
+> **Примечание:** Токен сохраняется в Dokploy. Ротация — вручную. При истечении токена деплой перестанет работать.
+
+### Вариант C (fallback): Локальная сборка + Docker Compose raw
+
+Когда ни GitHub App, ни PAT невозможны (корпоративные ограничения, одноразовый деплой):
+
+```bash
+# 1. Клонируй локально (у пользователя уже есть доступ)
+git clone "$GITHUB_URL" "$TEMP_DIR"
+
+# 2. Собери Docker-образ локально
+cd "$TEMP_DIR"
+docker build -t "$PROJECT_NAME:latest" .
+
+# 3. Сохрани образ в файл
+docker save "$PROJECT_NAME:latest" > "/tmp/$PROJECT_NAME.tar"
+
+# 4. Загрузи на сервер
+scp "/tmp/$PROJECT_NAME.tar" root@$SERVER_IP:/tmp/
+
+# 5. Загрузи образ в Docker на сервере
+bash scripts/ssh-exec.sh "$SERVER" "docker load < /tmp/$PROJECT_NAME.tar && rm /tmp/$PROJECT_NAME.tar"
+
+# 6. Создай Compose-проект с raw YAML (см. секцию "Docker Compose (raw)")
+```
+
+---
+
+## Docker Compose (raw)
+
+### Когда использовать
+
+- Приватные репо без GitHub App / PAT (Вариант C выше)
+- Локально собранные Docker-образы
+- Сложные multi-container приложения
+- Кастомные конфигурации, не подходящие для стандартного деплоя
+
+### Процесс деплоя
+
+```bash
+# 1. Создать проект
+RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER" POST project.create '{"name":"'"$PROJECT_NAME"'"}')
+PROJECT_ID=$(echo "$RESPONSE" | jq -r '.project.projectId // .projectId')
+ENVIRONMENT_ID=$(echo "$RESPONSE" | jq -r '.environment.environmentId // empty')
+
+# 2. Создать compose-проект
+COMPOSE=$(bash scripts/dokploy-api.sh "$SERVER" POST compose.create '{
+  "name": "'"$PROJECT_NAME"'",
+  "projectId": "'"$PROJECT_ID"'",
+  "environmentId": "'"$ENVIRONMENT_ID"'"
+}')
+COMPOSE_ID=$(echo "$COMPOSE" | jq -r '.composeId')
+
+# 3. Загрузить raw YAML
+COMPOSE_YAML=$(cat <<'YAML'
+version: '3.8'
+services:
+  app:
+    image: my-app:latest
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+    networks:
+      - dokploy-network
+networks:
+  dokploy-network:
+    external: true
+YAML
+)
+
+# Экранируй YAML для JSON
+COMPOSE_YAML_ESCAPED=$(echo "$COMPOSE_YAML" | jq -Rs .)
+
+bash scripts/dokploy-api.sh "$SERVER" POST compose.update '{
+  "composeId": "'"$COMPOSE_ID"'",
+  "sourceType": "raw",
+  "composePath": "docker-compose.yml",
+  "customCompose": '"$COMPOSE_YAML_ESCAPED"'
+}'
+
+# 4. Деплой
+bash scripts/dokploy-api.sh "$SERVER" POST compose.deploy '{"composeId":"'"$COMPOSE_ID"'"}'
+```
+
+### Webhook для Compose
+
+```bash
+# Получить refreshToken из compose
+COMPOSE_INFO=$(bash scripts/dokploy-api.sh "$SERVER" GET "compose.one?composeId=$COMPOSE_ID")
+REFRESH_TOKEN=$(echo "$COMPOSE_INFO" | jq -r '.refreshToken')
+
+# Webhook URL для compose
+echo "Webhook: $DOKPLOY_URL/api/deploy/compose/$REFRESH_TOKEN"
 ```
 
 ---
@@ -527,6 +755,7 @@ Env-переменные:
 | `Permission denied` | Неправильные права в Dockerfile | Проверь USER в Dockerfile |
 | `Out of memory` | Не хватает RAM при билде | Создай swap или билди локально, пуши image |
 | `Port already in use` | Конфликт портов | Измени порт в настройках приложения |
+| `fatal: could not read from remote repository` | Приватный репозиторий | См. секцию "Приватные репозитории" |
 
 4. Покажи пользователю ошибку и предложи решение
 
@@ -535,7 +764,7 @@ Env-переменные:
 Если CloudFlare API вернул ошибку:
 
 ```
-⚠️ Не удалось создать DNS-запись в CloudFlare.
+Не удалось создать DNS-запись в CloudFlare.
 Причина: <error message>
 
 Варианты:
@@ -565,11 +794,70 @@ Env-переменные:
 
 ---
 
+## Troubleshooting SSL / Let's Encrypt
+
+Если SSL-сертификат не выпустился (сайт недоступен по HTTPS или показывает ошибку сертификата):
+
+### Диагностика
+
+```bash
+# 1. Проверить DNS — должен возвращать IP сервера
+dig "$DOMAIN" +short @1.1.1.1
+
+# 2. Проверить что порты 80 и 443 открыты на сервере
+bash scripts/ssh-exec.sh "$SERVER" "ufw status | grep -E '80|443'"
+
+# 3. Проверить что CloudFlare proxy ВЫКЛЮЧЕН (для HTTP challenge)
+bash scripts/cloudflare-dns.sh get "$DOMAIN"
+# proxied должен быть false
+```
+
+### Решение
+
+```bash
+# 1. Убедиться что DNS без proxy
+bash scripts/cloudflare-dns.sh create "$DOMAIN" "$SERVER_IP" false
+
+# 2. Подождать DNS propagation
+sleep 30
+
+# 3. Рестарт Traefik для повторной попытки ACME challenge
+bash scripts/ssh-exec.sh "$SERVER" "docker restart dokploy-traefik"
+
+# 4. Подождать выпуск сертификата (до 60 секунд)
+sleep 60
+
+# 5. Проверить HTTPS
+curl -sI "https://$DOMAIN" | head -5
+```
+
+### Если всё ещё не работает
+
+```bash
+# Проверить логи Traefik
+bash scripts/ssh-exec.sh "$SERVER" "docker logs dokploy-traefik --tail 50 2>&1 | grep -i 'acme\|cert\|error'"
+```
+
+Типичные проблемы:
+- **"acme: error 403"** → CloudFlare proxy мешает. Выключи proxy, подожди 5 мин, рестартни Traefik
+- **"DNS problem: NXDOMAIN"** → DNS запись не существует или не propagated. Проверь запись в CloudFlare
+- **"connection refused"** → Порт 80 закрыт. Проверь UFW: `ufw allow 80/tcp`
+- **"too many certificates"** → Rate limit Let's Encrypt. Подожди 1 час и попробуй снова
+
+### После успешного выпуска сертификата
+
+Можно включить CloudFlare proxy обратно для CDN и DDoS-защиты:
+```bash
+bash scripts/cloudflare-dns.sh create "$DOMAIN" "$SERVER_IP" true
+```
+
+---
+
 ## Специальные случаи
 
-### Docker Compose проекты
+### Docker Compose проекты (из GitHub)
 
-Если обнаружен `docker-compose.yml`:
+Если обнаружен `docker-compose.yml` и используется GitHub:
 
 1. Проверь, что все сервисы подключены к `dokploy-network`:
    ```yaml
@@ -598,16 +886,4 @@ Env-переменные:
      "applicationId": "...",
      "buildPath": "/packages/frontend"
    }
-   ```
-
-### Private репозитории
-
-Если репо приватный:
-
-1. Dokploy поддерживает GitHub App — попроси пользователя установить через UI
-2. Или используй deploy key:
-   ```bash
-   # Сгенерируй SSH-ключ на сервере
-   bash scripts/ssh-exec.sh "$SERVER" "ssh-keygen -t ed25519 -f ~/.ssh/deploy_key -N ''"
-   # Попроси пользователя добавить публичный ключ в GitHub Settings → Deploy keys
    ```

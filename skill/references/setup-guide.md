@@ -120,56 +120,64 @@ bash scripts/wait-ready.sh "http://$IP:3000" 180 10
 
 Dokploy при первом запуске требует создания admin-аккаунта.
 
-**Вариант 1 — Через UI (попроси пользователя):**
-```
-Открой http://$IP:3000 в браузере и создай admin-аккаунт.
-После этого:
-1. Зайди в Settings → Profile → API/CLI
-2. Нажми "Generate API Key"
-3. Скопируй API-ключ и введи его сюда: /vps config server add main $IP --api-key <key>
-```
+> **Важно (v0.27+):** Эндпоинт `auth.createUser` / `auth.createAdmin` удалён в Dokploy v0.27. Админ-аккаунт создаётся ТОЛЬКО вручную через веб-интерфейс.
 
-**Вариант 2 — Попытаться автоматизировать через API (если Dokploy поддерживает):**
+**Шаг 7.1 — Попроси пользователя создать аккаунт:**
 
-Dokploy имеет endpoint `POST /api/auth.createAdmin`:
-```json
-{
-  "email": "admin@example.com",
-  "password": "generated-password"
-}
+```
+Dokploy установлен и работает!
+
+Теперь нужно создать admin-аккаунт:
+
+1. Открой в браузере: http://$IP:3000
+2. Создай аккаунт (email + пароль)
+3. После входа перейди в: Settings → Profile → API/CLI
+4. Нажми "Generate API Key"
+5. Скопируй API-ключ и введи его сюда
 ```
 
-Попробуй:
+Дождись, пока пользователь введёт API-ключ.
+
+**Шаг 7.2 — Валидация API-ключа:**
+
+После получения ключа от пользователя проверь его работоспособность:
+
 ```bash
-curl -s -X POST "http://$IP:3000/api/auth.createAdmin" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "http://$IP:3000/api/settings.version" \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@vps-ninja.local",
-    "password": "'"$(openssl rand -base64 24)"'"
-  }'
+  -H "x-api-key: $API_KEY")
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY=$(echo "$RESPONSE" | sed '$d')
 ```
 
-Если вернёт `{success: true, token: "..."}` → используй токен для генерации API-ключа.
+- Если `HTTP_CODE` = 200 → ключ рабочий, продолжай
+- Если `HTTP_CODE` = 401/403 → "Неверный API-ключ. Проверь и попробуй снова."
+- Если `HTTP_CODE` = 000/timeout → "Dokploy недоступен. Проверь http://$IP:3000"
 
-Если вернёт 404 или error → переходи к варианту 1 (попроси пользователя создать вручную).
+Также извлеки и покажи версию Dokploy:
+```bash
+VERSION=$(echo "$BODY" | jq -r '.version // "unknown"')
+echo "Dokploy версия: $VERSION"
+```
 
 ---
 
-## Шаг 8: Генерация API-ключа
+## Шаг 8: Проверка версии и совместимости
 
-Если удалось создать admin-аккаунт автоматически и получить токен:
+После валидации API-ключа проверь версию Dokploy:
 
 ```bash
-curl -s -X POST "http://$IP:3000/api/apiKey.create" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "VPS Ninja Auto-Generated",
-    "expiresAt": null
-  }'
+RESPONSE=$(bash scripts/dokploy-api.sh "$SERVER_NAME" GET settings.version)
+VERSION=$(echo "$RESPONSE" | jq -r '.version // "unknown"')
 ```
 
-Распарси ответ, получи `apiKey`.
+Покажи пользователю:
+```
+Dokploy $VERSION установлен и подключён.
+```
+
+> Если версия < v0.27, предупреди: "Версия Dokploy устаревшая. Некоторые API-вызовы могут работать иначе. Рекомендуется обновить."
 
 ---
 

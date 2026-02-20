@@ -8,7 +8,7 @@
 
 Проверяй в следующем порядке (сверху вниз — первое совпадение выигрывает):
 
-1. `docker-compose.yml` / `docker-compose.yaml` / `compose.yml` / `compose.yaml` → **Docker Compose**
+1. `docker-compose.yml` / `docker-compose.yaml` / `compose.yml` / `compose.yaml` → **Docker Compose** (но см. "Dockerfile + Compose конфликт" ниже)
 2. `Dockerfile` → **Docker**
 3. `package.json` → **Node.js** (определяй фреймворк внутри)
 4. `requirements.txt` OR `pyproject.toml` OR `Pipfile` → **Python**
@@ -19,6 +19,59 @@
 9. `*.csproj` → **.NET / C#**
 10. `composer.json` → **PHP**
 11. Нет совпадений → **Unknown** (попроси пользователя указать)
+
+### Dockerfile + Compose конфликт
+
+Если в проекте есть **и** `docker-compose.yml`, **и** `Dockerfile`:
+
+1. **Проанализируй compose-файл:** посчитай количество сервисов:
+   ```bash
+   # Количество сервисов в docker-compose.yml
+   SERVICE_COUNT=$(grep -cE '^\s{2}\w+:' docker-compose.yml)
+   # Или через yq/python если доступен
+   ```
+
+2. **Принятие решения:**
+
+   - **Compose содержит >1 сервис** (multi-container приложение):
+     Рекомендуй Compose. Спроси пользователя для подтверждения:
+     ```
+     Обнаружены docker-compose.yml (N сервисов) и Dockerfile.
+     Рекомендую деплоить как Docker Compose (multi-container).
+
+     Варианты:
+       1. Docker Compose — задеплоить все сервисы (рекомендуется)
+       2. Одиночный контейнер из Dockerfile
+     ```
+
+   - **Compose содержит 1 сервис:**
+     Это может быть обёртка вокруг Dockerfile для удобства разработки. Спроси:
+     ```
+     Обнаружены docker-compose.yml (1 сервис) и Dockerfile.
+
+     Варианты:
+       1. Docker Compose — деплой через compose API
+       2. Одиночный контейнер из Dockerfile (рекомендуется для простых приложений)
+     ```
+
+   - **Compose содержит только внешние сервисы** (образы без build, например только postgres/redis):
+     Compose используется для инфраструктуры разработки. Деплой через Dockerfile:
+     ```
+     docker-compose.yml содержит только инфраструктурные сервисы (БД, кэш).
+     Деплою приложение из Dockerfile, а БД создам через Dokploy.
+     ```
+
+3. **Определение типа compose-файла:**
+   ```bash
+   # Проверить: есть ли build директивы в compose
+   HAS_BUILD=$(grep -c 'build:' docker-compose.yml || echo 0)
+
+   # Проверить: есть ли только image директивы (без build)
+   HAS_IMAGE_ONLY=$(grep -c 'image:' docker-compose.yml || echo 0)
+
+   # Если есть build — приложение собирается из исходников
+   # Если только image — используются готовые образы
+   ```
 
 ---
 
