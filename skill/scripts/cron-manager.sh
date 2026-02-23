@@ -19,21 +19,26 @@ require_cmd jq
 ACTION="${1:?Usage: cron-manager.sh <list|add|remove|logs|run|status> <server> ...}"
 SERVER="${2:?Missing server name}"
 
-SSH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/ssh-exec.sh"
-
 run_remote() {
-  bash "$SSH_SCRIPT" "$SERVER" "$1"
+  bash "${SCRIPT_DIR}/ssh-exec.sh" "$SERVER" "$1"
 }
 
 CRON_DIR="/opt/vps-ninja/cron"
+
+# Validate cron schedule format (5 fields)
+validate_cron_schedule() {
+  local schedule="$1"
+  # Basic check: 5 space-separated fields containing only valid cron chars
+  [[ "$schedule" =~ ^[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+[[:space:]]+[0-9*/,-]+$ ]]
+}
 
 case "$ACTION" in
   list)
     log_info "Cron jobs on $SERVER"
     run_remote "
-      mkdir -p $CRON_DIR
-      if [ -f $CRON_DIR/jobs.json ]; then
-        cat $CRON_DIR/jobs.json | jq '.'
+      mkdir -p ${CRON_DIR}
+      if [ -f ${CRON_DIR}/jobs.json ]; then
+        cat ${CRON_DIR}/jobs.json | jq '.'
       else
         echo '[]'
       fi
@@ -46,110 +51,125 @@ case "$ACTION" in
     COMMAND="${5:?Missing command to run}"
     CONTAINER="${6:-}"
 
+    # Validate name (prevent path traversal / injection)
+    validate_name "$NAME" || die "Invalid job name: '$NAME'. Use alphanumeric, hyphens, underscores only." 1
+
+    # Validate schedule
+    validate_cron_schedule "$SCHEDULE" || die "Invalid cron schedule: '$SCHEDULE'. Use format: '0 3 * * *'" 1
+
     log_info "Adding cron job '$NAME': $SCHEDULE"
+
+    # Shell-escape values for safe interpolation into remote commands
+    safe_name=$(shell_escape "$NAME")
+    safe_schedule=$(shell_escape "$SCHEDULE")
+    safe_command=$(shell_escape "$COMMAND")
+    safe_container=$(shell_escape "${CONTAINER:-}")
+    created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
     # Build the actual command
     if [ -n "$CONTAINER" ]; then
-      FULL_CMD="docker exec \$(docker ps -q -f name=$CONTAINER) $COMMAND"
+      validate_name "$CONTAINER" || die "Invalid container name: $CONTAINER" 1
+      FULL_CMD="docker exec \$(docker ps -q -f name=${safe_container}) ${safe_command}"
     else
-      FULL_CMD="$COMMAND"
+      FULL_CMD="${safe_command}"
     fi
 
     run_remote "
-      mkdir -p $CRON_DIR/logs
+      mkdir -p ${CRON_DIR}/logs
 
-      # Save job metadata
-      if [ ! -f $CRON_DIR/jobs.json ]; then
-        echo '[]' > $CRON_DIR/jobs.json
+      # Initialize jobs.json if missing
+      if [ ! -f ${CRON_DIR}/jobs.json ]; then
+        echo '[]' > ${CRON_DIR}/jobs.json
       fi
 
-      # Remove existing job with same name
-      jq '[.[] | select(.name != \"$NAME\")]' $CRON_DIR/jobs.json > $CRON_DIR/jobs.tmp
-      mv $CRON_DIR/jobs.tmp $CRON_DIR/jobs.json
+      # Remove existing job with same name, then add new one (using jq safely)
+      jq --arg name ${safe_name} '[.[] | select(.name != \$name)]' ${CRON_DIR}/jobs.json > ${CRON_DIR}/jobs.tmp
+      mv ${CRON_DIR}/jobs.tmp ${CRON_DIR}/jobs.json
 
-      # Add new job
-      jq '. + [{
-        \"name\": \"$NAME\",
-        \"schedule\": \"$SCHEDULE\",
-        \"command\": \"$COMMAND\",
-        \"container\": \"${CONTAINER:-null}\",
-        \"created_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
-        \"enabled\": true
-      }]' $CRON_DIR/jobs.json > $CRON_DIR/jobs.tmp
-      mv $CRON_DIR/jobs.tmp $CRON_DIR/jobs.json
+      jq --arg name ${safe_name} --arg schedule ${safe_schedule} --arg command ${safe_command} --arg container ${safe_container} --arg created '${created_at}' \\
+        '. + [{name: \$name, schedule: \$schedule, command: \$command, container: \$container, created_at: \$created, enabled: true}]' \\
+        ${CRON_DIR}/jobs.json > ${CRON_DIR}/jobs.tmp
+      mv ${CRON_DIR}/jobs.tmp ${CRON_DIR}/jobs.json
 
-      # Create wrapper script
-      cat > $CRON_DIR/$NAME.sh << 'WRAPPER'
+      # Create wrapper script with logging
+      cat > ${CRON_DIR}/${safe_name}.sh << WRAPPER
 #!/bin/bash
-LOG_FILE=\"$CRON_DIR/logs/$NAME-\$(date +%Y%m%d).log\"
-echo \"[\$(date -u +%Y-%m-%dT%H:%M:%SZ)] START $NAME\" >> \"\$LOG_FILE\"
-$FULL_CMD >> \"\$LOG_FILE\" 2>&1
-EXIT_CODE=\$?
-echo \"[\$(date -u +%Y-%m-%dT%H:%M:%SZ)] END $NAME (exit: \$EXIT_CODE)\" >> \"\$LOG_FILE\"
-# Keep only last 7 days of logs
-find $CRON_DIR/logs -name '$NAME-*' -mtime +7 -delete 2>/dev/null
+LOG_FILE=\"${CRON_DIR}/logs/${safe_name}-\\\$(date +%Y%m%d).log\"
+echo \"[\\\$(date -u +%Y-%m-%dT%H:%M:%SZ)] START ${safe_name}\" >> \"\\\$LOG_FILE\"
+${FULL_CMD} >> \"\\\$LOG_FILE\" 2>&1
+EXIT_CODE=\\\$?
+echo \"[\\\$(date -u +%Y-%m-%dT%H:%M:%SZ)] END ${safe_name} (exit: \\\$EXIT_CODE)\" >> \"\\\$LOG_FILE\"
+find ${CRON_DIR}/logs -name '${safe_name}-*' -mtime +7 -delete 2>/dev/null
 WRAPPER
-      chmod +x $CRON_DIR/$NAME.sh
+      chmod +x ${CRON_DIR}/${safe_name}.sh
 
-      # Add to system crontab
-      (crontab -l 2>/dev/null | grep -v \"# vps-ninja:$NAME\"; echo \"$SCHEDULE $CRON_DIR/$NAME.sh # vps-ninja:$NAME\") | crontab -
+      # Add to system crontab (remove old entry first)
+      (crontab -l 2>/dev/null | grep -v '# vps-ninja:${safe_name}'; echo '${SCHEDULE} ${CRON_DIR}/${safe_name}.sh # vps-ninja:${safe_name}') | crontab -
     "
 
     log_info "Cron job '$NAME' added: $SCHEDULE"
-    echo "{\"status\": \"added\", \"name\": \"$NAME\", \"schedule\": \"$SCHEDULE\"}"
+    json_obj status added name "$NAME" schedule "$SCHEDULE"
     ;;
 
   remove)
     NAME="${3:?Missing job name}"
+    validate_name "$NAME" || die "Invalid job name: '$NAME'" 1
+    safe_name=$(shell_escape "$NAME")
 
     log_info "Removing cron job '$NAME'"
 
     run_remote "
       # Remove from crontab
-      crontab -l 2>/dev/null | grep -v \"# vps-ninja:$NAME\" | crontab -
+      crontab -l 2>/dev/null | grep -v '# vps-ninja:${safe_name}' | crontab -
 
       # Remove from jobs.json
-      if [ -f $CRON_DIR/jobs.json ]; then
-        jq '[.[] | select(.name != \"$NAME\")]' $CRON_DIR/jobs.json > $CRON_DIR/jobs.tmp
-        mv $CRON_DIR/jobs.tmp $CRON_DIR/jobs.json
+      if [ -f ${CRON_DIR}/jobs.json ]; then
+        jq --arg name ${safe_name} '[.[] | select(.name != \$name)]' ${CRON_DIR}/jobs.json > ${CRON_DIR}/jobs.tmp
+        mv ${CRON_DIR}/jobs.tmp ${CRON_DIR}/jobs.json
       fi
 
       # Remove script
-      rm -f $CRON_DIR/$NAME.sh
+      rm -f ${CRON_DIR}/${safe_name}.sh
     "
 
     log_info "Cron job '$NAME' removed"
-    echo "{\"status\": \"removed\", \"name\": \"$NAME\"}"
+    json_obj status removed name "$NAME"
     ;;
 
   logs)
     NAME="${3:?Missing job name}"
     TAIL_N="${4:-50}"
 
+    validate_name "$NAME" || die "Invalid job name: '$NAME'" 1
+    validate_int "$TAIL_N" || die "Tail count must be a positive integer, got: $TAIL_N" 1
+    safe_name=$(shell_escape "$NAME")
+
     log_info "Logs for cron job '$NAME' (last $TAIL_N lines)"
     run_remote "
-      LOG_FILE=\$(ls -t $CRON_DIR/logs/${NAME}-* 2>/dev/null | head -1)
+      LOG_FILE=\$(ls -t ${CRON_DIR}/logs/${safe_name}-* 2>/dev/null | head -1)
       if [ -n \"\$LOG_FILE\" ]; then
-        tail -n $TAIL_N \"\$LOG_FILE\"
+        tail -n ${TAIL_N} \"\$LOG_FILE\"
       else
-        echo 'No logs found for job: $NAME'
+        echo 'No logs found for job: ${safe_name}'
       fi
     "
     ;;
 
   run)
     NAME="${3:?Missing job name}"
+    validate_name "$NAME" || die "Invalid job name: '$NAME'" 1
+    safe_name=$(shell_escape "$NAME")
 
     log_info "Running cron job '$NAME' immediately"
     run_remote "
-      if [ -x $CRON_DIR/$NAME.sh ]; then
-        bash $CRON_DIR/$NAME.sh
-        echo '{\"status\": \"executed\", \"name\": \"$NAME\"}'
+      if [ -x ${CRON_DIR}/${safe_name}.sh ]; then
+        bash ${CRON_DIR}/${safe_name}.sh
       else
-        echo '{\"error\": \"Job script not found: $NAME\"}'
+        echo 'Job script not found: ${safe_name}' >&2
         exit 2
       fi
     "
+    json_obj status executed name "$NAME"
     ;;
 
   status)
@@ -160,8 +180,8 @@ WRAPPER
 
       echo ''
       echo '=== Recent Executions ==='
-      for log in $CRON_DIR/logs/*-\$(date +%Y%m%d).log 2>/dev/null; do
-        [ -f \"\$log\" ] && echo \"--- \$(basename \$log) ---\" && tail -3 \"\$log\"
+      for log in ${CRON_DIR}/logs/*-\$(date +%Y%m%d).log 2>/dev/null; do
+        [ -f \"\$log\" ] && echo \"--- \$(basename \"\$log\") ---\" && tail -3 \"\$log\"
       done
     "
     ;;
@@ -170,3 +190,5 @@ WRAPPER
     die "Unknown action: $ACTION. Use: list, add, remove, logs, run, status" 1
     ;;
 esac
+
+exit 0

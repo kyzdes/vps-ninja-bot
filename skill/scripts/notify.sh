@@ -154,7 +154,7 @@ case "$ACTION" in
       log_info "Notification sent to $SENT channel(s)"
     fi
 
-    echo "{\"sent\": $SENT, \"level\": \"$LEVEL\"}"
+    json_obj sent "$SENT" level "$LEVEL"
     ;;
 
   slack)
@@ -192,9 +192,35 @@ case "$ACTION" in
     TG_CHAT=$(config_get ".notifications.telegram.chat_id")
     DISCORD_URL=$(config_get ".notifications.discord.webhook_url")
 
-    [ -n "$SLACK_URL" ] && send_slack "$SLACK_URL" "Test notification from VPS Ninja" "info" && log_info "Slack: OK" || log_warn "Slack: not configured"
-    [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && send_telegram "$TG_TOKEN" "$TG_CHAT" "Test notification from VPS Ninja" "info" && log_info "Telegram: OK" || log_warn "Telegram: not configured"
-    [ -n "$DISCORD_URL" ] && send_discord "$DISCORD_URL" "Test notification from VPS Ninja" "info" && log_info "Discord: OK" || log_warn "Discord: not configured"
+    if [ -n "$SLACK_URL" ]; then
+      if send_slack "$SLACK_URL" "Test notification from VPS Ninja" "info"; then
+        log_info "Slack: OK"
+      else
+        log_error "Slack: send failed"
+      fi
+    else
+      log_warn "Slack: not configured"
+    fi
+
+    if [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ]; then
+      if send_telegram "$TG_TOKEN" "$TG_CHAT" "Test notification from VPS Ninja" "info"; then
+        log_info "Telegram: OK"
+      else
+        log_error "Telegram: send failed"
+      fi
+    else
+      log_warn "Telegram: not configured"
+    fi
+
+    if [ -n "$DISCORD_URL" ]; then
+      if send_discord "$DISCORD_URL" "Test notification from VPS Ninja" "info"; then
+        log_info "Discord: OK"
+      else
+        log_error "Discord: send failed"
+      fi
+    else
+      log_warn "Discord: not configured"
+    fi
     ;;
 
   *)

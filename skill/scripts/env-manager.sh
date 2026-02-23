@@ -44,10 +44,10 @@ audit_log() {
     --arg details "$details" \
     '{timestamp: $ts, user: $user, server: $server, app_id: $app, action: $action, key: $key, details: $details}')
 
-  # Append to history (keep last 500 entries)
+  # Append to history atomically (keep last 500 entries)
   local updated
   updated=$(jq ". + [$entry] | .[-500:]" "$HISTORY_FILE" 2>/dev/null) || updated="[$entry]"
-  echo "$updated" > "$HISTORY_FILE"
+  echo "$updated" | atomic_write "$HISTORY_FILE"
 
   log_debug "Audit: $action $key on $app_id"
 }
@@ -60,13 +60,14 @@ get_app_env() {
   bash "$API_SCRIPT" "$SERVER" GET "application.one?applicationId=$app_id" 2>/dev/null | jq -r '.env // ""'
 }
 
-# Parse env string to JSON object
+# Parse env string to JSON object (using jq for safe escaping)
 env_to_json() {
   local env_str="$1"
-  echo "$env_str" | grep -v '^#' | grep -v '^$' | while IFS='=' read -r key value; do
-    [ -z "$key" ] && continue
-    printf '"%s": "%s",' "$key" "$value"
-  done | sed 's/,$//' | printf '{%s}' "$(cat)"
+  echo "$env_str" | grep -v '^#' | grep -v '^$' | jq -Rs '
+    split("\n") | map(select(length > 0 and contains("="))) |
+    map(split("=") | {(.[0]): (.[1:] | join("="))}) |
+    add // {}
+  '
 }
 
 # Mask secret values for display
@@ -95,15 +96,14 @@ case "$ACTION" in
     fi
 
     COUNT=0
-    echo "$ENV_STR" | grep -v '^#' | grep -v '^$' | while IFS='=' read -r key value; do
+    while IFS='=' read -r key value; do
       [ -z "$key" ] && continue
       MASKED=$(mask_value "$key" "$value")
       printf "  %-30s = %s\n" "$key" "$MASKED"
       COUNT=$((COUNT + 1))
-    done
+    done < <(echo "$ENV_STR" | grep -v '^#' | grep -v '^$')
 
-    TOTAL=$(echo "$ENV_STR" | grep -c '=' || echo 0)
-    echo "{\"count\": $TOTAL}"
+    json_obj count "$COUNT"
     ;;
 
   get)
@@ -111,7 +111,7 @@ case "$ACTION" in
     KEY="${4:?Missing variable name}"
 
     ENV_STR=$(get_app_env "$APP_ID")
-    VALUE=$(echo "$ENV_STR" | grep "^${KEY}=" | head -1 | cut -d'=' -f2-)
+    VALUE=$(echo "$ENV_STR" | grep -F "${KEY}=" | grep "^${KEY}=" | head -1 | cut -d'=' -f2-)
 
     if [ -z "$VALUE" ]; then
       die "Variable '$KEY' not found" 2
@@ -134,7 +134,7 @@ case "$ACTION" in
     ENV_STR=$(get_app_env "$APP_ID")
 
     # Remove existing key (if present) and add new
-    NEW_ENV=$(echo "$ENV_STR" | grep -v "^${KEY}=")
+    NEW_ENV=$(echo "$ENV_STR" | grep -vF "${KEY}=" | grep -v "^${KEY}=")
     NEW_ENV="${NEW_ENV}
 ${KEY}=${VALUE}"
     NEW_ENV=$(echo "$NEW_ENV" | grep -v '^$')
@@ -146,7 +146,7 @@ ${KEY}=${VALUE}"
 
     audit_log "$APP_ID" "set" "$KEY" "value updated"
     log_info "Variable '$KEY' updated"
-    echo "{\"status\": \"ok\", \"key\": \"$KEY\", \"action\": \"set\"}"
+    json_obj status ok key "$KEY" action set
     ;;
 
   delete)
@@ -156,7 +156,7 @@ ${KEY}=${VALUE}"
     log_info "Deleting $KEY from app $APP_ID"
 
     ENV_STR=$(get_app_env "$APP_ID")
-    NEW_ENV=$(echo "$ENV_STR" | grep -v "^${KEY}=")
+    NEW_ENV=$(echo "$ENV_STR" | grep -vF "${KEY}=" | grep -v "^${KEY}=")
 
     ESCAPED_ENV=$(echo "$NEW_ENV" | jq -Rs .)
     bash "$API_SCRIPT" "$SERVER" POST application.saveEnvironment \
@@ -164,7 +164,7 @@ ${KEY}=${VALUE}"
 
     audit_log "$APP_ID" "delete" "$KEY" "variable removed"
     log_info "Variable '$KEY' deleted"
-    echo "{\"status\": \"ok\", \"key\": \"$KEY\", \"action\": \"deleted\"}"
+    json_obj status ok key "$KEY" action deleted
     ;;
 
   diff)
@@ -227,7 +227,7 @@ ${KEY}=${VALUE}"
     COUNT=$(echo "$NEW_ENV" | grep -c '=' || echo 0)
     audit_log "$APP_ID" "import" "*" "imported $COUNT variables from $ENV_FILE"
     log_info "Imported $COUNT variables"
-    echo "{\"status\": \"ok\", \"imported\": $COUNT}"
+    json_obj status ok imported "$COUNT"
     ;;
 
   audit)
@@ -235,9 +235,9 @@ ${KEY}=${VALUE}"
     log_info "Environment audit trail"
 
     if [ -n "$APP_ID" ]; then
-      jq "[.[] | select(.app_id == \"$APP_ID\" and .server == \"$SERVER\")] | reverse | .[:50]" "$HISTORY_FILE"
+      jq --arg app "$APP_ID" --arg srv "$SERVER" '[.[] | select(.app_id == $app and .server == $srv)] | reverse | .[:50]' "$HISTORY_FILE"
     else
-      jq "[.[] | select(.server == \"$SERVER\")] | reverse | .[:50]" "$HISTORY_FILE"
+      jq --arg srv "$SERVER" '[.[] | select(.server == $srv)] | reverse | .[:50]' "$HISTORY_FILE"
     fi
     ;;
 

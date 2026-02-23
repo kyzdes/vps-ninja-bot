@@ -241,6 +241,7 @@ case "$ACTION" in
     DOMAIN="${2:?Missing domain}"
     log_info "SSL/TLS security check for $DOMAIN"
 
+    require_cmd openssl
     validate_domain "$DOMAIN" || die "Invalid domain: $DOMAIN" 1
 
     echo "=== Certificate Info ==="

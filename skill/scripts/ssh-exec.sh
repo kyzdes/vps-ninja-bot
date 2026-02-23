@@ -15,19 +15,25 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-# SSH options: disable host key checking for automation, set timeouts
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o LogLevel=ERROR"
+# SSH options as array (safe, no word-splitting issues)
+# accept-new: accept key on first connect, verify on subsequent (MITM protection)
+SSH_OPTS=(
+  -o StrictHostKeyChecking=accept-new
+  -o ConnectTimeout=10
+  -o ServerAliveInterval=30
+  -o ServerAliveCountMax=3
+  -o LogLevel=ERROR
+)
 
 # Global command timeout (seconds) — prevents hanging on long operations
 CMD_TIMEOUT=$(get_setting "timeout_ssh" "600")
 
 # Execute SSH command with timeout wrapper
 run_ssh() {
-  local ssh_cmd=("$@")
   if command -v timeout &>/dev/null; then
-    timeout "$CMD_TIMEOUT" "${ssh_cmd[@]}"
+    timeout "$CMD_TIMEOUT" "$@"
   else
-    "${ssh_cmd[@]}"
+    "$@"
   fi
 }
 
@@ -40,6 +46,9 @@ if [ "${1:-}" = "--password" ]; then
   validate_ip "$HOST" || die "Invalid IP address: $HOST" 1
   require_cmd sshpass
 
+  # Use SSHPASS env var instead of -p to avoid password in process listing
+  export SSHPASS="$PASSWORD"
+
   # Upload mode
   if [ "${4:-}" = "--upload" ]; then
     LOCAL_FILE="${5:?Missing local file path}"
@@ -47,7 +56,7 @@ if [ "${1:-}" = "--password" ]; then
     [ ! -f "$LOCAL_FILE" ] && die "Local file not found: $LOCAL_FILE" 1
 
     log_info "Uploading $LOCAL_FILE → $HOST:$REMOTE_PATH"
-    run_ssh sshpass -p "$PASSWORD" scp $SSH_OPTS "$LOCAL_FILE" "root@${HOST}:${REMOTE_PATH}"
+    run_ssh sshpass -e scp "${SSH_OPTS[@]}" "$LOCAL_FILE" "root@${HOST}:${REMOTE_PATH}"
     exit $?
   fi
 
@@ -55,7 +64,7 @@ if [ "${1:-}" = "--password" ]; then
   CMD="${4:?Missing command}"
   log_debug "SSH (password) → root@$HOST: executing command"
 
-  run_ssh sshpass -p "$PASSWORD" ssh $SSH_OPTS "root@${HOST}" -- "$CMD"
+  run_ssh sshpass -e ssh "${SSH_OPTS[@]}" "root@${HOST}" -- "$CMD"
   exit $?
 fi
 
@@ -73,9 +82,9 @@ if [ "${2:-}" = "--upload" ]; then
 
   log_info "Uploading $LOCAL_FILE → $SERVER_HOST:$REMOTE_PATH"
   if [ -n "$SERVER_SSH_KEY" ] && [ "$SERVER_SSH_KEY" != "null" ]; then
-    run_ssh scp $SSH_OPTS -i "$SERVER_SSH_KEY" "$LOCAL_FILE" "${SERVER_USER}@${SERVER_HOST}:${REMOTE_PATH}"
+    run_ssh scp "${SSH_OPTS[@]}" -i "$SERVER_SSH_KEY" "$LOCAL_FILE" "${SERVER_USER}@${SERVER_HOST}:${REMOTE_PATH}"
   else
-    run_ssh scp $SSH_OPTS "$LOCAL_FILE" "${SERVER_USER}@${SERVER_HOST}:${REMOTE_PATH}"
+    run_ssh scp "${SSH_OPTS[@]}" "$LOCAL_FILE" "${SERVER_USER}@${SERVER_HOST}:${REMOTE_PATH}"
   fi
   exit $?
 fi
@@ -87,7 +96,7 @@ require_server "$SERVER"
 log_debug "SSH → ${SERVER_USER}@${SERVER_HOST}: executing command"
 
 if [ -n "$SERVER_SSH_KEY" ] && [ "$SERVER_SSH_KEY" != "null" ]; then
-  run_ssh ssh $SSH_OPTS -i "$SERVER_SSH_KEY" "${SERVER_USER}@${SERVER_HOST}" -- "$CMD"
+  run_ssh ssh "${SSH_OPTS[@]}" -i "$SERVER_SSH_KEY" "${SERVER_USER}@${SERVER_HOST}" -- "$CMD"
 else
-  run_ssh ssh $SSH_OPTS "${SERVER_USER}@${SERVER_HOST}" -- "$CMD"
+  run_ssh ssh "${SSH_OPTS[@]}" "${SERVER_USER}@${SERVER_HOST}" -- "$CMD"
 fi

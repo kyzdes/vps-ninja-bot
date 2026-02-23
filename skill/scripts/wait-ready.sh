@@ -25,7 +25,7 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
   # Consider 2xx and 3xx as success, 4xx means app is running (just not this route)
   if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
     log_info "Ready! HTTP $HTTP_CODE after ${ELAPSED}s (${ATTEMPT} attempts)"
-    echo "{\"status\": \"ready\", \"url\": \"$URL\", \"http_code\": $HTTP_CODE, \"elapsed\": $ELAPSED, \"attempts\": $ATTEMPT}"
+    json_obj status ready url "$URL" http_code "$HTTP_CODE" elapsed "$ELAPSED" attempts "$ATTEMPT"
     exit 0
   fi
 
@@ -41,5 +41,5 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 done
 
 log_error "Timeout after ${TIMEOUT}s waiting for $URL"
-echo "{\"status\": \"timeout\", \"url\": \"$URL\", \"timeout\": $TIMEOUT, \"attempts\": $ATTEMPT, \"last_code\": \"$HTTP_CODE\"}" >&2
+json_obj status timeout url "$URL" timeout_sec "$TIMEOUT" attempts "$ATTEMPT" last_code "$HTTP_CODE" >&2
 exit 1

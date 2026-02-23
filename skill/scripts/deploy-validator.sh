@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
     --prev-deployment) PREV_DEPLOYMENT="$2"; shift 2 ;;
     --latency) LATENCY_THRESHOLD="$2"; shift 2 ;;
     --error-rate) ERROR_RATE_THRESHOLD="$2"; shift 2 ;;
-    *) shift ;;
+    *) log_warn "Unknown option: $1"; shift ;;
   esac
 done
 
@@ -113,7 +113,7 @@ case "$ACTION" in
           fi
 
           # Record to deploy history
-          echo "{\"status\": \"validated\", \"url\": \"$BASE_URL\", \"checks_passed\": $PASS_COUNT, \"elapsed\": $ELAPSED, \"avg_latency_ms\": $LATENCY_MS}"
+          json_obj status validated url "$BASE_URL" checks_passed "$PASS_COUNT" elapsed "$ELAPSED" avg_latency_ms "$LATENCY_MS"
           exit 0
         fi
       else
@@ -167,7 +167,7 @@ case "$ACTION" in
       do_rollback "Smoke tests failed: $FAILED/$TOTAL endpoints returned errors"
     fi
 
-    echo "{\"status\": \"passed\", \"total\": $TOTAL, \"passed\": $PASSED, \"failed\": $FAILED, \"results\": $RESULTS}"
+    echo "$RESULTS" | jq --arg status passed --argjson total "$TOTAL" --argjson passed "$PASSED" --argjson failed "$FAILED" '{status: $status, total: $total, passed: $passed, failed: $failed, results: .}'
     ;;
 
   gate)
@@ -206,7 +206,7 @@ case "$ACTION" in
     fi
 
     log_info "All gates passed"
-    echo "{\"status\": \"passed\", \"avg_latency_ms\": $AVG_LATENCY, \"error_rate_percent\": $ERROR_RATE, \"total_requests\": $TOTAL_REQUESTS}"
+    json_obj status passed avg_latency_ms "$AVG_LATENCY" error_rate_percent "$ERROR_RATE" total_requests "$TOTAL_REQUESTS"
     ;;
 
   *)

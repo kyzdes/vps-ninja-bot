@@ -8,7 +8,9 @@
 #   - Structured error handling with JSON output
 #   - Logging (info, warn, error, debug)
 #   - Smart retry with idempotency awareness
-#   - Input sanitization
+#   - Input sanitization and validation
+#   - Remote execution helpers
+#   - Cleanup trap (safe, no eval)
 
 set -euo pipefail
 
@@ -31,13 +33,17 @@ log_warn()  { echo -e "${_YELLOW}[WARN]${_RESET} $*" >&2; }
 log_error() { echo -e "${_RED}[ERROR]${_RESET} $*" >&2; }
 log_debug() { [ -n "$VPS_DEBUG" ] && echo -e "${_DIM}[DEBUG]${_RESET} $*" >&2 || true; }
 
-# ── Error handling ──
+# ── Error handling (JSON-safe via jq) ──
 
 # Output structured JSON error and exit
 # Usage: die "message" [exit_code]
 die() {
   local msg="${1:-Unknown error}" code="${2:-1}"
-  echo "{\"error\": \"$msg\"}" >&2
+  if command -v jq &>/dev/null; then
+    jq -n --arg msg "$msg" '{"error": $msg}' >&2
+  else
+    echo "{\"error\": \"$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')\"}" >&2
+  fi
   exit "$code"
 }
 
@@ -45,8 +51,23 @@ die() {
 # Usage: die_detail "message" "details" [exit_code]
 die_detail() {
   local msg="${1:-Unknown error}" details="${2:-}" code="${3:-1}"
-  echo "{\"error\": \"$msg\", \"details\": \"$details\"}" >&2
+  if command -v jq &>/dev/null; then
+    jq -n --arg msg "$msg" --arg details "$details" '{"error": $msg, "details": $details}' >&2
+  else
+    echo "{\"error\": \"$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g')\"}" >&2
+  fi
   exit "$code"
+}
+
+# Build JSON safely using jq
+# Usage: json_obj key1 val1 key2 val2 ...
+json_obj() {
+  local args=()
+  while [ $# -ge 2 ]; do
+    args+=(--arg "$1" "$2")
+    shift 2
+  done
+  jq -n "${args[@]}" '$ARGS.named'
 }
 
 # ── Config management ──
@@ -69,15 +90,11 @@ require_config() {
 
 # Read a value from config with jq
 # Usage: config_get '.servers."main".host'
-# Returns: value or empty string
+# Returns: value or empty string (never fails with set -e)
 config_get() {
   local query="$1"
   local result
-  result=$(jq -r "$query // empty" "$CONFIG_PATH" 2>/dev/null) || {
-    log_debug "Failed to read config key: $query"
-    echo ""
-    return 1
-  }
+  result=$(jq -r "$query // empty" "$CONFIG_PATH" 2>/dev/null) || result=""
   echo "$result"
 }
 
@@ -175,18 +192,31 @@ retry() {
 
 # ── Input sanitization ──
 
-# Sanitize string for safe use in JSON values
+# Sanitize string for safe use in JSON values (use jq when possible)
 # Usage: sanitize_json "user input"
 sanitize_json() {
   local input="$1"
-  echo "$input" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g'
+  if command -v jq &>/dev/null; then
+    printf '%s' "$input" | jq -Rs .
+  else
+    # Fallback: escape backslash, double-quote, control chars
+    printf '%s' "$input" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | tr -d '\000-\010\013\014\016-\037'
+  fi
 }
 
-# Validate IP address format
+# ── Input validation ──
+
+# Validate IP address format (checks each octet is 0-255)
 # Usage: validate_ip "1.2.3.4" || die "Invalid IP"
 validate_ip() {
   local ip="$1"
-  [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+  [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || return 1
+  local IFS='.'
+  read -ra octets <<< "$ip"
+  for octet in "${octets[@]}"; do
+    (( octet > 255 )) && return 1
+  done
+  return 0
 }
 
 # Validate domain format
@@ -194,6 +224,24 @@ validate_ip() {
 validate_domain() {
   local domain="$1"
   [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$ ]]
+}
+
+# Validate that a string is a positive integer
+# Usage: validate_int "42" || die "Expected integer"
+validate_int() {
+  [[ "${1:-}" =~ ^[0-9]+$ ]]
+}
+
+# Validate name (alphanumeric, hyphens, underscores only)
+# Usage: validate_name "my-app" || die "Invalid name"
+validate_name() {
+  [[ "${1:-}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]]
+}
+
+# Shell-escape a string for safe interpolation into remote commands
+# Usage: escaped=$(shell_escape "$user_input")
+shell_escape() {
+  printf '%q' "$1"
 }
 
 # ── Domain utilities ──
@@ -204,16 +252,14 @@ MULTI_TLDS="co.uk|org.uk|ac.uk|gov.uk|com.au|net.au|org.au|com.br|net.br|org.br|
 # Extract zone domain from full domain, handling multi-TLDs
 # Usage: get_zone_domain "app.example.com"      → "example.com"
 # Usage: get_zone_domain "app.example.co.uk"     → "example.co.uk"
-# Usage: get_zone_domain "sub.app.example.co.uk" → "example.co.uk"
 get_zone_domain() {
   local domain="$1"
-  local tld_part zone
 
   # Check for known multi-part TLDs
+  local tld
   for tld in $(echo "$MULTI_TLDS" | tr '|' ' '); do
     if [[ "$domain" == *".$tld" ]]; then
-      # Remove TLD, then get last remaining part
-      local without_tld="${domain%.$tld}"
+      local without_tld="${domain%."$tld"}"
       local base="${without_tld##*.}"
       echo "${base}.${tld}"
       return 0
@@ -227,33 +273,66 @@ get_zone_domain() {
 # ── Mask secrets in output ──
 
 # Mask a sensitive string for display
-# Usage: mask_secret "api_key_12345" → "api_***345"
+# Usage: mask_secret "api_key_12345" → "api***"
 mask_secret() {
   local val="$1"
   local len=${#val}
-  if [ "$len" -le 6 ]; then
+  if [ "$len" -le 8 ]; then
     echo "***"
+  elif [ "$len" -le 20 ]; then
+    echo "${val:0:2}***"
   else
     echo "${val:0:3}***${val: -3}"
   fi
 }
 
-# ── Cleanup trap ──
+# ── Cleanup trap (safe, no eval) ──
 
 _CLEANUP_FUNCS=()
 
-# Register a cleanup function to run on exit
-# Usage: on_cleanup "rm -rf /tmp/workdir"
+# Register a cleanup function name to run on exit
+# IMPORTANT: only pass function names, not arbitrary strings
+# Usage: on_cleanup my_cleanup_function
 on_cleanup() {
   _CLEANUP_FUNCS+=("$1")
 }
 
 _run_cleanup() {
   for fn in "${_CLEANUP_FUNCS[@]:-}"; do
-    eval "$fn" 2>/dev/null || true
+    if declare -F "$fn" &>/dev/null; then
+      "$fn" 2>/dev/null || true
+    else
+      log_debug "Cleanup: '$fn' is not a function, skipping"
+    fi
   done
 }
 trap _run_cleanup EXIT
+
+# ── Remote execution (shared helper) ──
+
+# Execute a command on a remote server via ssh-exec.sh
+# Usage: run_remote_cmd <server-name> <command>
+# Requires: SERVER_HOST, SERVER_USER, SERVER_SSH_KEY to be set (via require_server)
+run_remote_cmd() {
+  local server="$1" cmd="$2"
+  bash "${SCRIPT_DIR}/ssh-exec.sh" "$server" "$cmd"
+}
+
+# ── Atomic file write ──
+
+# Write content to a file atomically (write to temp, then rename)
+# Usage: echo "$content" | atomic_write "/path/to/file"
+atomic_write() {
+  local target="$1"
+  local tmpfile
+  tmpfile=$(mktemp "${target}.XXXXXX")
+  if cat > "$tmpfile" && mv "$tmpfile" "$target"; then
+    return 0
+  else
+    rm -f "$tmpfile" 2>/dev/null
+    return 1
+  fi
+}
 
 # ── Dependency checks ──
 

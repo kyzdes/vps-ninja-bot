@@ -17,12 +17,8 @@ require_cmd jq
 ACTION="${1:?Usage: monitor.sh <enable|disable|status|alert|query|dashboard> <server> ...}"
 SERVER="${2:?Missing server name}"
 
-SSH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/ssh-exec.sh"
-API_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/dokploy-api.sh"
-TEMPLATES_DIR="$(dirname "${BASH_SOURCE[0]}")/../templates"
-
 run_remote() {
-  bash "$SSH_SCRIPT" "$SERVER" "$1"
+  bash "${SCRIPT_DIR}/ssh-exec.sh" "$SERVER" "$1"
 }
 
 case "$ACTION" in
@@ -30,6 +26,10 @@ case "$ACTION" in
     log_info "Deploying monitoring stack on $SERVER"
 
     require_server "$SERVER"
+
+    # Generate a random password for Grafana admin
+    GRAFANA_PASSWORD=$(openssl rand -base64 16 2>/dev/null || head -c 16 /dev/urandom | base64)
+    safe_grafana_password=$(shell_escape "$GRAFANA_PASSWORD")
 
     # Step 1: Create monitoring directory
     log_info "Step 1/5: Creating monitoring config..."
@@ -133,8 +133,9 @@ receivers:
 AMCFG"
 
     # Step 5: Deploy stack via Docker Compose
+    # Ports bound to 127.0.0.1 only (not publicly accessible)
     log_info "Step 4/5: Deploying containers..."
-    run_remote "cat > /opt/monitoring/docker-compose.yml << 'COMPOSE'
+    run_remote "cat > /opt/monitoring/docker-compose.yml << COMPOSE
 version: '3.8'
 
 services:
@@ -143,7 +144,7 @@ services:
     container_name: vps-ninja-prometheus
     restart: unless-stopped
     ports:
-      - '9090:9090'
+      - '127.0.0.1:9090:9090'
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
@@ -159,9 +160,9 @@ services:
     container_name: vps-ninja-grafana
     restart: unless-stopped
     ports:
-      - '3001:3000'
+      - '127.0.0.1:3001:3000'
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=vpsninja2026
+      - GF_SECURITY_ADMIN_PASSWORD=${safe_grafana_password}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
@@ -173,7 +174,7 @@ services:
     container_name: vps-ninja-alertmanager
     restart: unless-stopped
     ports:
-      - '9093:9093'
+      - '127.0.0.1:9093:9093'
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     networks:
@@ -227,7 +228,15 @@ COMPOSE"
     log_info "Prometheus: HTTP $PROMETHEUS_OK"
     log_info "Grafana: HTTP $GRAFANA_OK"
 
-    echo "{\"status\": \"enabled\", \"prometheus\": \"http://$SERVER_HOST:9090\", \"grafana\": \"http://$SERVER_HOST:3001\", \"grafana_password\": \"vpsninja2026\"}"
+    # Save password to config for retrieval later
+    run_remote "echo $(shell_escape "$GRAFANA_PASSWORD") > /opt/monitoring/.grafana_password && chmod 600 /opt/monitoring/.grafana_password"
+
+    json_obj status enabled \
+      prometheus "http://${SERVER_HOST}:9090 (localhost only)" \
+      grafana "http://${SERVER_HOST}:3001 (localhost only)" \
+      grafana_user admin \
+      grafana_password "$GRAFANA_PASSWORD" \
+      note "Ports bound to 127.0.0.1. Use SSH tunnel to access: ssh -L 3001:localhost:3001 root@${SERVER_HOST}"
     ;;
 
   disable)
@@ -259,12 +268,14 @@ COMPOSE"
     CHANNEL="${3:?Missing channel (slack/telegram/discord/webhook)}"
     URL="${4:?Missing webhook URL}"
 
-    log_info "Configuring alert channel: $CHANNEL → $URL"
+    log_info "Configuring alert channel: $CHANNEL → $(mask_secret "$URL")"
     require_server "$SERVER"
 
-    # Update alertmanager config with webhook
-    run_remote "
-      cat > /opt/monitoring/alertmanager/alertmanager.yml << AMCFG
+    # Shell-escape URL to prevent injection in heredoc
+    safe_url=$(shell_escape "$URL")
+
+    # Update alertmanager config with webhook (quoted heredoc to prevent expansion)
+    run_remote "cat > /opt/monitoring/alertmanager/alertmanager.yml << 'AMCFG'
 global:
   resolve_timeout: 5m
 
@@ -278,15 +289,15 @@ route:
 receivers:
   - name: 'webhook'
     webhook_configs:
-      - url: '$URL'
+      - url: '${URL}'
         send_resolved: true
 AMCFG
 
       docker restart vps-ninja-alertmanager 2>/dev/null
     "
 
-    log_info "Alert channel configured. Alerts will be sent to $CHANNEL"
-    echo "{\"status\": \"configured\", \"channel\": \"$CHANNEL\"}"
+    log_info "Alert channel configured"
+    json_obj status configured channel "$CHANNEL"
     ;;
 
   query)
@@ -294,15 +305,31 @@ AMCFG
     require_server "$SERVER"
 
     log_debug "PromQL: $PROMQL"
-    run_remote "curl -s 'http://localhost:9090/api/v1/query?query=$(echo "$PROMQL" | jq -Rs . | tr -d '\"')' 2>/dev/null" | jq '.data.result' 2>/dev/null || die "Prometheus query failed" 2
+    # URL-encode the PromQL query safely
+    ENCODED_QUERY=$(printf '%s' "$PROMQL" | jq -Rs @uri | tr -d '"')
+    run_remote "curl -s 'http://localhost:9090/api/v1/query?query=${ENCODED_QUERY}' 2>/dev/null" | jq '.data.result' 2>/dev/null || die "Prometheus query failed" 2
     ;;
 
   dashboard)
     require_server "$SERVER"
-    echo "{\"grafana_url\": \"http://$SERVER_HOST:3001\", \"prometheus_url\": \"http://$SERVER_HOST:9090\", \"credentials\": {\"user\": \"admin\", \"password\": \"vpsninja2026\"}}"
+
+    # Try to read saved password
+    SAVED_PASSWORD=$(run_remote "cat /opt/monitoring/.grafana_password 2>/dev/null" || echo "")
+    if [ -z "$SAVED_PASSWORD" ]; then
+      SAVED_PASSWORD="(check /opt/monitoring/.grafana_password on server)"
+    fi
+
+    json_obj \
+      grafana_url "http://${SERVER_HOST}:3001 (localhost only - use SSH tunnel)" \
+      prometheus_url "http://${SERVER_HOST}:9090 (localhost only)" \
+      user admin \
+      password "$SAVED_PASSWORD" \
+      ssh_tunnel "ssh -L 3001:localhost:3001 -L 9090:localhost:9090 root@${SERVER_HOST}"
     ;;
 
   *)
     die "Unknown action: $ACTION. Use: enable, disable, status, alert, query, dashboard" 1
     ;;
 esac
+
+exit 0

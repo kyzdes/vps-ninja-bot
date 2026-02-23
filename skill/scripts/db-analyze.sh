@@ -17,26 +17,36 @@ require_cmd jq
 ACTION="${1:?Usage: db-analyze.sh <stats|slowlog|indexes|tables|connections> <server> ...}"
 SERVER="${2:?Missing server name}"
 
-SSH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/ssh-exec.sh"
-
 run_remote() {
-  bash "$SSH_SCRIPT" "$SERVER" "$1"
+  bash "${SCRIPT_DIR}/ssh-exec.sh" "$SERVER" "$1"
 }
 
+# Safe Docker exec helpers — escape container name and query to prevent injection
 docker_exec_pg() {
   local container="$1" query="$2"
-  run_remote "docker exec \$(docker ps -q -f name=$container) psql -U postgres -t -A -c \"$query\" 2>/dev/null"
+  local safe_container
+  safe_container=$(shell_escape "$container")
+  # Pass query via stdin to avoid shell metacharacter issues
+  run_remote "docker exec -i \$(docker ps -q -f name=${safe_container}) psql -U postgres -t -A 2>/dev/null << 'PGQUERY'
+${query}
+PGQUERY"
 }
 
 docker_exec_mysql() {
   local container="$1" query="$2"
-  run_remote "docker exec \$(docker ps -q -f name=$container) mysql -u root -e \"$query\" 2>/dev/null"
+  local safe_container
+  safe_container=$(shell_escape "$container")
+  run_remote "docker exec -i \$(docker ps -q -f name=${safe_container}) mysql -u root 2>/dev/null << 'MYQUERY'
+${query}
+MYQUERY"
 }
 
 case "$ACTION" in
   stats)
     DB_TYPE="${3:?Missing database type}"
     CONTAINER="${4:?Missing container name}"
+
+    validate_name "$CONTAINER" || die "Invalid container name: $CONTAINER" 1
 
     log_info "Database statistics for $CONTAINER ($DB_TYPE)"
 
@@ -62,11 +72,13 @@ case "$ACTION" in
             'uptime_seconds', VARIABLE_VALUE
           ) FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Uptime';
         "
-        run_remote "docker exec \$(docker ps -q -f name=$CONTAINER) mysql -u root -e \"
-          SELECT table_schema AS db,
-                 ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
-          FROM information_schema.tables GROUP BY table_schema;
-        \" 2>/dev/null"
+        local safe_container
+        safe_container=$(shell_escape "$CONTAINER")
+        run_remote "docker exec -i \$(docker ps -q -f name=${safe_container}) mysql -u root 2>/dev/null << 'MYQUERY'
+SELECT table_schema AS db,
+       ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
+FROM information_schema.tables GROUP BY table_schema;
+MYQUERY"
         ;;
       *)
         die "Unsupported DB type for stats: $DB_TYPE. Use: postgres, mysql" 1
@@ -78,6 +90,9 @@ case "$ACTION" in
     DB_TYPE="${3:?Missing database type}"
     CONTAINER="${4:?Missing container name}"
     TOP_N="${5:-10}"
+
+    validate_name "$CONTAINER" || die "Invalid container name: $CONTAINER" 1
+    validate_int "$TOP_N" || die "Top-N must be a positive integer, got: $TOP_N" 1
 
     log_info "Top $TOP_N slowest queries in $CONTAINER"
 
@@ -104,14 +119,14 @@ case "$ACTION" in
               rows
             FROM pg_stat_statements
             ORDER BY mean_exec_time DESC
-            LIMIT $TOP_N
+            LIMIT ${TOP_N}
           ) t;
         "
         ;;
       mysql)
         docker_exec_mysql "$CONTAINER" "
           SELECT * FROM performance_schema.events_statements_summary_by_digest
-          ORDER BY AVG_TIMER_WAIT DESC LIMIT $TOP_N\G
+          ORDER BY AVG_TIMER_WAIT DESC LIMIT ${TOP_N}\G
         "
         ;;
       *)
@@ -123,6 +138,8 @@ case "$ACTION" in
   indexes)
     CONTAINER="${3:?Missing container name}"
     DB_NAME="${4:?Missing database name}"
+
+    validate_name "$CONTAINER" || die "Invalid container name: $CONTAINER" 1
 
     log_info "Index analysis for $DB_NAME in $CONTAINER"
 
@@ -174,6 +191,8 @@ case "$ACTION" in
     CONTAINER="${3:?Missing container name}"
     DB_NAME="${4:?Missing database name}"
 
+    validate_name "$CONTAINER" || die "Invalid container name: $CONTAINER" 1
+
     log_info "Table sizes in $DB_NAME"
 
     docker_exec_pg "$CONTAINER" "
@@ -191,6 +210,8 @@ case "$ACTION" in
   connections)
     DB_TYPE="${3:?Missing database type}"
     CONTAINER="${4:?Missing container name}"
+
+    validate_name "$CONTAINER" || die "Invalid container name: $CONTAINER" 1
 
     log_info "Active connections in $CONTAINER"
 
@@ -219,3 +240,5 @@ case "$ACTION" in
     die "Unknown action: $ACTION. Use: stats, slowlog, indexes, tables, connections" 1
     ;;
 esac
+
+exit 0

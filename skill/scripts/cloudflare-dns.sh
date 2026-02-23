@@ -103,6 +103,9 @@ find_a_record() {
 do_upsert() {
   local domain="$1" ip="$2" proxied="${3:-true}"
 
+  # Normalize proxied to valid JSON boolean
+  [[ "$proxied" == "true" ]] || proxied=false
+
   validate_domain "$domain" || die "Invalid domain format: $domain" 1
   validate_ip "$ip" || die "Invalid IP format: $ip" 1
 
@@ -111,7 +114,9 @@ do_upsert() {
   local existing
   existing=$(find_a_record "$ZONE_ID" "$domain")
 
-  local record_body="{\"type\":\"A\",\"name\":\"$domain\",\"content\":\"$ip\",\"proxied\":$proxied,\"ttl\":1}"
+  local record_body
+  record_body=$(jq -n --arg name "$domain" --arg content "$ip" --argjson proxied "$proxied" \
+    '{type: "A", name: $name, content: $content, proxied: $proxied, ttl: 1}')
 
   if [ -n "$existing" ] && [ "$existing" != "null" ]; then
     local record_id old_ip

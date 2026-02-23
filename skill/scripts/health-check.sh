@@ -167,6 +167,7 @@ case "$ACTION" in
     DOMAIN="${2:?Missing domain}"
     log_info "Checking SSL certificate for $DOMAIN"
 
+    require_cmd openssl
     validate_domain "$DOMAIN" || die "Invalid domain: $DOMAIN" 1
 
     SSL_INFO=$(echo | openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" 2>/dev/null | openssl x509 -noout -dates -subject -issuer 2>/dev/null) || {
@@ -185,7 +186,7 @@ case "$ACTION" in
     NOW_EPOCH=$(date +%s)
     DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
 
-    echo "{\"domain\": \"$DOMAIN\", \"subject\": \"$SUBJECT\", \"issuer\": \"$ISSUER\", \"valid_from\": \"$NOT_BEFORE\", \"valid_until\": \"$NOT_AFTER\", \"days_remaining\": $DAYS_LEFT}"
+    json_obj domain "$DOMAIN" subject "$SUBJECT" issuer "$ISSUER" valid_from "$NOT_BEFORE" valid_until "$NOT_AFTER" days_remaining "$DAYS_LEFT"
 
     if [ "$DAYS_LEFT" -lt 7 ]; then
       log_error "SSL certificate expires in $DAYS_LEFT days!"
