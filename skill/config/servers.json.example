@@ -14,5 +14,13 @@
   },
   "defaults": {
     "server": "main"
+  },
+  "settings": {
+    "timeout_api": 30,
+    "timeout_ssh": 600,
+    "timeout_deploy": 600,
+    "backup_dir": "/backups",
+    "backup_keep": 5,
+    "auto_backup_before_destroy": true
   }
 }

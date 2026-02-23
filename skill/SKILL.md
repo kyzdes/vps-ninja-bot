@@ -4,9 +4,10 @@ description: >
   Deploy and manage applications on VPS servers with Dokploy.
   Use when the user wants to: set up a new VPS server, deploy a project
   from GitHub, manage domains/DNS, create databases, check server status,
-  view logs, or remove deployed projects.
+  view logs, backup/restore databases, rollback deployments, monitor health,
+  or remove deployed projects.
   Triggers on: VPS, deploy, server setup, Dokploy, hosting, domain, DNS.
-argument-hint: "[setup|deploy|domain|db|status|logs|destroy|config] [args...]"
+argument-hint: "[setup|deploy|domain|db|status|logs|backup|rollback|health|destroy|config] [args...]"
 disable-model-invocation: true
 allowed-tools:
   - Bash
@@ -17,7 +18,7 @@ allowed-tools:
   - WebFetch
 ---
 
-# VPS Ninja — DevOps Automation Skill
+# VPS Ninja — DevOps Automation Skill v2
 
 Ты — DevOps-инженер. Твоя задача — автоматизировать работу с VPS серверами через Dokploy, CloudFlare DNS и SSH.
 
@@ -56,6 +57,9 @@ $ARGUMENTS = "setup 45.55.67.89 password123"
 | `db` | Управление базами данных (см. секцию ниже) |
 | `status` | Статус сервера и проектов (см. секцию ниже) |
 | `logs` | Просмотр логов приложения (см. секцию ниже) |
+| `backup` | Управление бэкапами БД (см. секцию ниже) |
+| `rollback` | Откатить на предыдущий деплой (см. секцию ниже) |
+| `health` | Проверка здоровья сервера/приложения (см. секцию ниже) |
 | `destroy` | Удаление проекта (см. секцию ниже) |
 | `config` | Управление конфигурацией (см. секцию ниже) |
 | (пусто) | Покажи справку по доступным командам |
@@ -78,14 +82,17 @@ CONFIG_PATH="<skill-dir>/config/servers.json"
 
 ### 2. Использование скриптов
 
-Все скрипты находятся в `<skill-dir>/scripts/`:
+Все скрипты находятся в `<skill-dir>/scripts/` и используют общую библиотеку `common.sh`:
 
 | Скрипт | Использование |
 |:-------|:--------------|
+| `common.sh` | Автоматически подключается другими скриптами. Содержит: logging, error handling, config, retry, validation |
 | `dokploy-api.sh` | `bash <script> <server-name> <METHOD> <endpoint> [json-body]` |
-| `cloudflare-dns.sh` | `bash <script> <action> [args...]` |
-| `ssh-exec.sh` | `bash <script> <server-name> <command>` или `bash <script> --password <pass> <ip> <command>` |
-| `wait-ready.sh` | `bash <script> <url> [timeout] [interval]` |
+| `cloudflare-dns.sh` | `bash <script> <action> [args...]` — поддерживает multi-TLD домены (.co.uk и т.д.) |
+| `ssh-exec.sh` | `bash <script> <server-name> <command>` или `bash <script> --password <pass> <ip> <command>` — с защитой от инъекций и таймаутами |
+| `wait-ready.sh` | `bash <script> <url> [timeout] [interval]` — с прогрессом |
+| `backup.sh` | `bash <script> <create\|restore\|list\|cleanup> <server> [args...]` |
+| `health-check.sh` | `bash <script> <server\|app\|docker\|disk\|ssl> [args...]` |
 
 **Важно:** Всегда передавай полный путь к скриптам при вызове через Bash tool.
 
@@ -95,12 +102,14 @@ CONFIG_PATH="<skill-dir>/config/servers.json"
 - Перед командой `destroy` **ВСЕГДА** проси подтверждение
 - Перед созданием/изменением DNS-записей показывай что будет изменено
 - При ошибках маскируй чувствительные данные в логах
+- SSH-команды передаются через `--` для защиты от инъекций
 
 ### 4. Обработка ошибок
 
 - При ошибке API/SSH покажи понятное объяснение и предложи решение
 - Не повторяй ту же команду молча — если упало, значит нужно что-то изменить
-- Используй retry только там, где это имеет смысл (network errors)
+- Retry автоматически срабатывает только для **идемпотентных** GET-запросов
+- POST/PUT/DELETE запросы **не повторяются** автоматически (защита от дубликатов)
 
 ### 5. Определение пути к skill
 
@@ -123,6 +132,14 @@ SKILL_DIR="./skill"
 
 Для простоты, используй **Метод 2** для разработки (skill в репозитории), затем при установке skill будет скопирован в `~/.claude/skills/vps/`.
 
+### 6. Debug mode
+
+Если пользователь передаёт `--debug` флаг, установи `VPS_DEBUG=1` перед вызовом скриптов:
+```bash
+VPS_DEBUG=1 bash scripts/dokploy-api.sh main GET project.all
+```
+Это включит детальный вывод всех команд, curl outputs, JSON responses.
+
 ---
 
 ## Команды (inline-инструкции)
@@ -134,7 +151,12 @@ SKILL_DIR="./skill"
 #### `config` (без аргументов)
 Покажи текущую конфигурацию (без секретов):
 ```bash
-cat config/servers.json | jq 'del(.servers[].dokploy_api_key, .cloudflare.api_token)'
+cat config/servers.json | jq '{
+  servers: (.servers | to_entries | map({key: .key, value: {host: .value.host, ssh_user: .value.ssh_user, dokploy_url: .value.dokploy_url, added_at: .value.added_at}}) | from_entries),
+  cloudflare: {configured: (.cloudflare.api_token != null and .cloudflare.api_token != "")},
+  defaults: .defaults,
+  settings: .settings
+}'
 ```
 
 #### `config server add <name> <ip> [--ssh-key <path>]`
@@ -175,6 +197,22 @@ cat config/servers.json | jq 'del(.servers[].dokploy_api_key, .cloudflare.api_to
   }
 }
 ```
+
+#### `config settings [key] [value]`
+Управление настройками:
+```json
+{
+  "settings": {
+    "timeout_api": 30,
+    "timeout_ssh": 600,
+    "timeout_deploy": 600,
+    "backup_dir": "/backups",
+    "backup_keep": 5,
+    "auto_backup_before_destroy": true
+  }
+}
+```
+Без аргументов — покажи все настройки. С ключом и значением — установи.
 
 ---
 
@@ -308,7 +346,7 @@ bash scripts/dokploy-api.sh <server> GET project.all
 
 ### `/vps logs` — Просмотр логов
 
-**Синтаксис:** `logs <project-name> [--lines <n>] [--build]`
+**Синтаксис:** `logs <project-name> [--lines <n>] [--build] [--follow]`
 
 #### Runtime-логи (без --build)
 
@@ -329,6 +367,126 @@ bash scripts/ssh-exec.sh <server> "docker service logs <service-name> --tail <n-
 
 ---
 
+### `/vps backup` — Управление бэкапами БД
+
+**Подкоманды:**
+
+#### `backup create <db-name> [--type <postgres|mysql|mongo|redis>]`
+
+1. Определи тип БД и имя контейнера из Dokploy API
+2. Выполни бэкап:
+   ```bash
+   bash scripts/backup.sh create <server> <db-type> <container-name>
+   ```
+3. Покажи результат:
+   ```
+   Бэкап создан
+   Файл: /backups/my-app-db-20260223_143000.sql.gz
+   Размер: 12.5 MB
+   Тип: PostgreSQL
+   ```
+
+#### `backup restore <db-name> [--file <path>]`
+
+1. Если `--file` не указан, покажи список доступных бэкапов:
+   ```bash
+   bash scripts/backup.sh list <server>
+   ```
+2. **ОБЯЗАТЕЛЬНО** попроси подтверждение (это деструктивная операция!)
+3. Выполни восстановление:
+   ```bash
+   bash scripts/backup.sh restore <server> <db-type> <container-name> <backup-file>
+   ```
+
+#### `backup list [--server <name>]`
+
+```bash
+bash scripts/backup.sh list <server>
+```
+
+#### `backup cleanup [--keep <n>]`
+
+Удали старые бэкапы, оставив последние N (по умолчанию 5):
+```bash
+bash scripts/backup.sh cleanup <server> /backups <n>
+```
+
+---
+
+### `/vps rollback` — Откат на предыдущий деплой
+
+**Синтаксис:** `rollback <project-name> [--to <deployment-id>]`
+
+Шаги:
+1. Получи историю деплоев приложения:
+   ```bash
+   bash scripts/dokploy-api.sh <server> GET "deployment.all?applicationId=<appId>"
+   ```
+2. Покажи список последних 5 деплоев:
+   ```
+   История деплоев my-app:
+   ┌────┬────────────────────┬──────────┬───────────────────────┐
+   │ #  │ ID                 │ Статус   │ Дата                  │
+   ├────┼────────────────────┼──────────┼───────────────────────┤
+   │ 1  │ dep_abc123 (текущ.)│ done     │ 2026-02-23 14:30      │
+   │ 2  │ dep_def456         │ done     │ 2026-02-22 11:00      │
+   │ 3  │ dep_ghi789         │ error    │ 2026-02-21 09:15      │
+   └────┴────────────────────┴──────────┴───────────────────────┘
+   ```
+3. Если `--to` не указан, спроси: "Откатить на деплой #2 (dep_def456)?"
+4. Перед откатом создай автоматический бэкап БД (если `auto_backup_before_destroy` в settings):
+   ```bash
+   bash scripts/backup.sh create <server> <db-type> <container-name>
+   ```
+5. Выполни ре-деплой через обновление ветки/коммита и повторный deploy
+6. Мониторь статус деплоя (как в deploy-guide.md)
+7. Покажи итог
+
+---
+
+### `/vps health` — Проверка здоровья
+
+**Подкоманды:**
+
+#### `health` или `health server [--server <name>]`
+
+Полная проверка сервера:
+```bash
+bash scripts/health-check.sh server <server>
+```
+
+Покажи красиво с прогресс-барами и статусами.
+
+#### `health app <project-name>`
+
+Проверка здоровья конкретного приложения:
+```bash
+bash scripts/health-check.sh app <server> <app-name>
+```
+
+#### `health docker [--server <name>]`
+
+Docker-специфичная проверка:
+```bash
+bash scripts/health-check.sh docker <server>
+```
+
+#### `health disk [--server <name>]`
+
+Анализ использования диска:
+```bash
+bash scripts/health-check.sh disk <server>
+```
+
+#### `health ssl <domain>`
+
+Проверка SSL-сертификата:
+```bash
+bash scripts/health-check.sh ssl <domain>
+```
+
+---
+
 ### `/vps destroy` — Удаление проекта
 
 **Синтаксис:** `destroy <project-name> [--keep-db] [--keep-dns]`
@@ -337,18 +495,13 @@ bash scripts/ssh-exec.sh <server> "docker service logs <service-name> --tail <n-
 
 Шаги:
 1. Найди проект и все связанные ресурсы (приложения, БД, домены)
-2. Покажи пользователю что будет удалено:
-   ```
-   Будет удалено:
-   - Проект: my-app
-   - Приложение: my-app (app.example.com)
-   - База данных: my-app-db (PostgreSQL)
-   - DNS-запись: app.example.com
-
-   Продолжить? (да/нет)
-   ```
+2. Покажи пользователю что будет удалено
 3. Дождись подтверждения
-4. Если подтверждено:
+4. Если `auto_backup_before_destroy` включён в settings, создай бэкап БД:
+   ```bash
+   bash scripts/backup.sh create <server> <db-type> <container-name>
+   ```
+5. Если подтверждено:
    - Останови приложение:
      ```bash
      bash scripts/dokploy-api.sh <server> POST application.stop '{"applicationId":"<id>"}'
@@ -369,7 +522,7 @@ bash scripts/ssh-exec.sh <server> "docker service logs <service-name> --tail <n-
      ```bash
      bash scripts/dokploy-api.sh <server> DELETE project.remove '{"projectId":"<id>"}'
      ```
-5. Покажи отчёт об удалённых ресурсах
+6. Покажи отчёт об удалённых ресурсах и путь к бэкапу (если был создан)
 
 ---
 
@@ -398,35 +551,51 @@ references/dokploy-api-reference.md (опционально, для справк
 Покажи:
 
 ```
-VPS Ninja — автоматизация VPS через Dokploy
+VPS Ninja v2 — автоматизация VPS через Dokploy
 
-Доступные команды:
+Основные команды:
 
   /vps setup <ip> <password>              Настроить VPS с нуля (установить Dokploy)
   /vps deploy <github-url> [--domain D]   Задеплоить проект из GitHub
+  /vps status [--server <name>]           Статус сервера и проектов
+
+Управление:
+
   /vps domain add <domain> <project>      Добавить домен к проекту
   /vps domain remove <domain>             Удалить домен
   /vps domain list                        Список всех доменов
   /vps db create <type> <name>            Создать БД (postgres/mysql/mongo/redis)
   /vps db list                            Список всех БД
   /vps db delete <name>                   Удалить БД
-  /vps status [--server <name>]           Статус сервера и проектов
   /vps logs <project> [--build]           Логи приложения или билда
-  /vps destroy <project>                  Удалить проект
+
+Мониторинг и безопасность:
+
+  /vps health [server|app|docker|disk]    Проверка здоровья
+  /vps health ssl <domain>               Проверить SSL-сертификат
+  /vps backup create <db-name>            Создать бэкап БД
+  /vps backup restore <db-name>           Восстановить из бэкапа
+  /vps backup list                        Список бэкапов
+  /vps rollback <project>                 Откатить на предыдущий деплой
+
+Прочее:
+
+  /vps destroy <project>                  Удалить проект (с авто-бэкапом)
   /vps config                             Показать конфигурацию
   /vps config server add <name> <ip>      Добавить сервер
   /vps config cloudflare <token>          Настроить CloudFlare API
+  /vps config settings [key] [value]      Управление настройками
+
+Флаги:
+  --debug                                Детальный вывод для отладки
+  --server <name>                        Указать сервер (иначе — default)
 
 Примеры:
 
   /vps setup 45.55.67.89 MyPassword123
   /vps deploy github.com/user/my-app --domain app.example.com
-  /vps status
-  /vps logs my-app --build
+  /vps health
+  /vps backup create my-app-db
+  /vps rollback my-app
+  /vps status --debug
 ```
-
----
-
-## Debug mode
-
-Если пользователь передаёт `--debug` флаг, выводи подробные логи всех команд (curl outputs, JSON responses, etc.).

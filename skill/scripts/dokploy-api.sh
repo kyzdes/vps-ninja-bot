@@ -7,61 +7,99 @@
 #   dokploy-api.sh main POST project.create '{"name":"my-app"}'
 #   dokploy-api.sh main POST application.deploy '{"applicationId":"abc123"}'
 #
-# Reads credentials from config/servers.json (relative to script location)
+# Reads credentials from config/servers.json
 # Returns: JSON response from Dokploy API
 # Exit codes: 0 = success, 1 = config error, 2 = HTTP error, 3 = network error
 
-set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+require_cmd jq curl
 
 SERVER="${1:?Usage: dokploy-api.sh <server> <method> <endpoint> [body]}"
 METHOD="${2:?Missing HTTP method}"
 ENDPOINT="${3:?Missing API endpoint}"
 BODY="${4:-}"
 
-# Determine script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="$SCRIPT_DIR/../config/servers.json"
+# Load server config
+require_server "$SERVER"
 
-if [ ! -f "$CONFIG" ]; then
-  echo '{"error": "Config not found. Run: /vps config server add <name> <ip>"}' >&2
-  exit 1
-fi
+[ -z "$SERVER_DOKPLOY_URL" ] && die "Dokploy URL not configured for server '$SERVER'" 1
+[ -z "$SERVER_DOKPLOY_KEY" ] && die "Dokploy API key not configured for server '$SERVER'" 1
 
-URL=$(jq -r ".servers.\"$SERVER\".dokploy_url // empty" "$CONFIG")
-KEY=$(jq -r ".servers.\"$SERVER\".dokploy_api_key // empty" "$CONFIG")
+URL="$SERVER_DOKPLOY_URL"
+KEY="$SERVER_DOKPLOY_KEY"
 
-if [ -z "$URL" ] || [ -z "$KEY" ]; then
-  echo "{\"error\": \"Server '$SERVER' not found or missing API key\"}" >&2
-  exit 1
-fi
+# Determine timeout from settings
+TIMEOUT=$(get_setting "timeout_api" "30")
 
-CURL_ARGS=(
-  -s -S
-  --max-time 30
-  --retry 2
-  --retry-delay 3
-  -X "$METHOD"
-  -H "Content-Type: application/json"
-  -H "x-api-key: $KEY"
-  -w "\n%{http_code}"
-)
+# Determine if this request is safe to retry (idempotent)
+IDEMPOTENT=false
+case "$METHOD" in
+  GET|HEAD|OPTIONS) IDEMPOTENT=true ;;
+esac
 
-if [ -n "$BODY" ]; then
-  CURL_ARGS+=(-d "$BODY")
-fi
+log_debug "API call: $METHOD /api/$ENDPOINT (idempotent=$IDEMPOTENT)"
 
-RESPONSE=$(curl "${CURL_ARGS[@]}" "${URL}/api/${ENDPOINT}" 2>&1) || {
-  echo "{\"error\": \"Network error connecting to $URL\"}" >&2
-  exit 3
+# Build curl arguments
+do_request() {
+  local curl_args=(
+    -s -S
+    --max-time "$TIMEOUT"
+    -X "$METHOD"
+    -H "Content-Type: application/json"
+    -H "x-api-key: $KEY"
+    -w "\n%{http_code}"
+  )
+
+  if [ -n "$BODY" ]; then
+    curl_args+=(-d "$BODY")
+    log_debug "Request body: $BODY"
+  fi
+
+  local response
+  response=$(curl "${curl_args[@]}" "${URL}/api/${ENDPOINT}" 2>&1) || {
+    log_error "Network error connecting to $URL"
+    return 3
+  }
+
+  # Separate HTTP code from body
+  local http_code body_resp
+  http_code=$(echo "$response" | tail -1)
+  body_resp=$(echo "$response" | sed '$d')
+
+  log_debug "HTTP $http_code from $ENDPOINT"
+
+  # Validate HTTP code is numeric
+  if ! [[ "$http_code" =~ ^[0-9]+$ ]]; then
+    log_error "Invalid HTTP response from $URL"
+    echo "{\"error\": \"Invalid HTTP response\", \"raw\": \"$(sanitize_json "$body_resp")\"}" >&2
+    return 3
+  fi
+
+  if [ "$http_code" -ge 400 ]; then
+    log_error "HTTP $http_code from $ENDPOINT"
+    echo "$body_resp" >&2
+    return 2
+  fi
+
+  # Validate response is valid JSON (if non-empty)
+  if [ -n "$body_resp" ]; then
+    if echo "$body_resp" | jq empty 2>/dev/null; then
+      echo "$body_resp"
+    else
+      # Non-JSON response, wrap it
+      log_warn "Non-JSON response from $ENDPOINT"
+      echo "{\"raw\": \"$(sanitize_json "$body_resp")\"}"
+    fi
+  fi
+
+  return 0
 }
 
-# Separate HTTP code from body
-HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-BODY_RESP=$(echo "$RESPONSE" | sed '$d')
-
-if [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then
-  echo "$BODY_RESP" >&2
-  exit 2
+# Execute with smart retry
+if [ "$IDEMPOTENT" = true ]; then
+  retry --max 3 --delay 2 --idempotent -- do_request
+else
+  # Non-idempotent (POST/PUT/DELETE): no retry
+  do_request
 fi
-
-echo "$BODY_RESP"
