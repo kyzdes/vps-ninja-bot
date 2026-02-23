@@ -360,18 +360,6 @@ skill/
 
 ---
 
-## Документация
-
-| Документ | Описание |
-|:---------|:---------|
-| [PRD.md](PRD.md) | Product Requirements |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Техническая архитектура |
-| [SUMMARY.md](SUMMARY.md) | Итоговая сводка |
-| [skill/references/](skill/references/) | Детальные гайды |
-| [skill/references/v3-features-guide.md](skill/references/v3-features-guide.md) | Гайд по v3 фичам |
-
----
-
 ## Contributing
 
 Pull requests welcome!
