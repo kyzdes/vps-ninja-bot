@@ -1,0 +1,49 @@
+# Ghost — Modern publishing platform
+# Usage: /vps template deploy ghost --domain blog.example.com
+version: "3.8"
+
+services:
+  ghost:
+    image: ghost:5-alpine
+    restart: unless-stopped
+    environment:
+      url: https://${DOMAIN}
+      database__client: mysql
+      database__connection__host: mysql
+      database__connection__user: ghost
+      database__connection__password: ${DB_PASSWORD}
+      database__connection__database: ghost
+      NODE_ENV: production
+    volumes:
+      - ghost_content:/var/lib/ghost/content
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ghost.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.ghost.entrypoints=websecure"
+      - "traefik.http.routers.ghost.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ghost.loadbalancer.server.port=2368"
+    networks:
+      - internal
+      - dokploy-network
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ghost
+      MYSQL_USER: ghost
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - internal
+
+volumes:
+  ghost_content:
+  mysql_data:
+
+networks:
+  internal:
+  dokploy-network:
+    external: true

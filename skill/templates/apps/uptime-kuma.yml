@@ -1,0 +1,25 @@
+# Uptime Kuma — Self-hosted monitoring tool (like Uptime Robot)
+# Usage: /vps template deploy uptime-kuma --domain status.example.com
+version: "3.8"
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    restart: unless-stopped
+    volumes:
+      - kuma_data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime-kuma.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.uptime-kuma.entrypoints=websecure"
+      - "traefik.http.routers.uptime-kuma.tls.certresolver=letsencrypt"
+      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+    networks:
+      - dokploy-network
+
+volumes:
+  kuma_data:
+
+networks:
+  dokploy-network:
+    external: true

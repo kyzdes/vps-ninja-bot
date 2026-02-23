@@ -5,9 +5,11 @@ description: >
   Use when the user wants to: set up a new VPS server, deploy a project
   from GitHub, manage domains/DNS, create databases, check server status,
   view logs, backup/restore databases, rollback deployments, monitor health,
-  or remove deployed projects.
-  Triggers on: VPS, deploy, server setup, Dokploy, hosting, domain, DNS.
-argument-hint: "[setup|deploy|domain|db|status|logs|backup|rollback|health|destroy|config] [args...]"
+  manage environment variables, set up monitoring, run security audits,
+  schedule cron jobs, deploy app templates, or remove deployed projects.
+  Triggers on: VPS, deploy, server setup, Dokploy, hosting, domain, DNS,
+  monitoring, backup, security, cron, template.
+argument-hint: "[setup|deploy|domain|db|status|logs|backup|rollback|health|env|monitor|security|cron|template|notify|destroy|config] [args...]"
 disable-model-invocation: true
 allowed-tools:
   - Bash
@@ -18,7 +20,7 @@ allowed-tools:
   - WebFetch
 ---
 
-# VPS Ninja — DevOps Automation Skill v2
+# VPS Ninja — DevOps Automation Skill v3
 
 Ты — DevOps-инженер. Твоя задача — автоматизировать работу с VPS серверами через Dokploy, CloudFlare DNS и SSH.
 
@@ -60,6 +62,14 @@ $ARGUMENTS = "setup 45.55.67.89 password123"
 | `backup` | Управление бэкапами БД (см. секцию ниже) |
 | `rollback` | Откатить на предыдущий деплой (см. секцию ниже) |
 | `health` | Проверка здоровья сервера/приложения (см. секцию ниже) |
+| `env` | Управление переменными окружения (см. секцию ниже) |
+| `monitor` | Prometheus + Grafana мониторинг (см. секцию ниже) |
+| `security` | Аудит безопасности сервера (см. секцию ниже) |
+| `cron` | Управление cron-задачами (см. секцию ниже) |
+| `template` | Деплой готовых приложений из шаблонов (см. секцию ниже) |
+| `notify` | Настройка уведомлений Slack/Telegram/Discord (см. секцию ниже) |
+| `db-analyze` | Анализ производительности БД (см. секцию ниже) |
+| `validate` | Валидация деплоя и smoke-тесты (см. секцию ниже) |
 | `destroy` | Удаление проекта (см. секцию ниже) |
 | `config` | Управление конфигурацией (см. секцию ниже) |
 | (пусто) | Покажи справку по доступным командам |
@@ -93,6 +103,13 @@ CONFIG_PATH="<skill-dir>/config/servers.json"
 | `wait-ready.sh` | `bash <script> <url> [timeout] [interval]` — с прогрессом |
 | `backup.sh` | `bash <script> <create\|restore\|list\|cleanup> <server> [args...]` |
 | `health-check.sh` | `bash <script> <server\|app\|docker\|disk\|ssl> [args...]` |
+| `deploy-validator.sh` | `bash <script> <validate\|smoke\|gate> <server> <url> [args...]` |
+| `notify.sh` | `bash <script> <send\|slack\|telegram\|discord\|test> [args...]` |
+| `env-manager.sh` | `bash <script> <list\|get\|set\|delete\|diff\|export\|import\|audit> <server> [args...]` |
+| `monitor.sh` | `bash <script> <enable\|disable\|status\|alert\|query\|dashboard> <server> [args...]` |
+| `db-analyze.sh` | `bash <script> <stats\|slowlog\|indexes\|tables\|connections> <server> [args...]` |
+| `cron-manager.sh` | `bash <script> <list\|add\|remove\|logs\|run\|status> <server> [args...]` |
+| `security-scan.sh` | `bash <script> <server\|deps\|ports\|docker\|ssh\|ssl> <server> [args...]` |
 
 **Важно:** Всегда передавай полный путь к скриптам при вызове через Bash tool.
 
@@ -487,6 +504,393 @@ bash scripts/health-check.sh ssl <domain>
 
 ---
 
+### `/vps env` — Управление переменными окружения
+
+**Подкоманды:**
+
+#### `env list <app-name> [--server <name>]`
+
+Показать переменные окружения приложения (секреты маскируются):
+```bash
+bash scripts/env-manager.sh list <server> <app-name>
+```
+
+#### `env get <app-name> <key>`
+
+Получить значение конкретной переменной:
+```bash
+bash scripts/env-manager.sh get <server> <app-name> <key>
+```
+
+#### `env set <app-name> <key> <value>`
+
+Установить переменную окружения (с записью в audit log):
+```bash
+bash scripts/env-manager.sh set <server> <app-name> <key> <value>
+```
+После установки спроси, нужен ли ре-деплой для применения изменений.
+
+#### `env delete <app-name> <key>`
+
+Удалить переменную (с подтверждением):
+```bash
+bash scripts/env-manager.sh delete <server> <app-name> <key>
+```
+
+#### `env diff <app1> <app2>`
+
+Сравнить переменные двух приложений:
+```bash
+bash scripts/env-manager.sh diff <server> <app1> <app2>
+```
+
+#### `env export <app-name> [--file <path>]`
+
+Экспортировать переменные в .env файл:
+```bash
+bash scripts/env-manager.sh export <server> <app-name> [file]
+```
+
+#### `env import <app-name> <file>`
+
+Импортировать переменные из .env файла:
+```bash
+bash scripts/env-manager.sh import <server> <app-name> <file>
+```
+
+#### `env audit [--app <name>]`
+
+Показать историю изменений переменных:
+```bash
+bash scripts/env-manager.sh audit <server> [app-name]
+```
+
+---
+
+### `/vps monitor` — Мониторинг (Prometheus + Grafana)
+
+**Подкоманды:**
+
+#### `monitor enable [--server <name>]`
+
+Развернуть стек мониторинга (Prometheus + Grafana + Alertmanager + node_exporter + cAdvisor):
+```bash
+bash scripts/monitor.sh enable <server>
+```
+После установки покажи URL-адреса: Grafana (порт 3001), Prometheus (порт 9090), Alertmanager (порт 9093).
+
+#### `monitor disable [--server <name>]`
+
+Остановить и удалить стек мониторинга:
+```bash
+bash scripts/monitor.sh disable <server>
+```
+**Проси подтверждение перед удалением!**
+
+#### `monitor status [--server <name>]`
+
+Статус всех компонентов мониторинга:
+```bash
+bash scripts/monitor.sh status <server>
+```
+
+#### `monitor alert <webhook-url> [--server <name>]`
+
+Настроить webhook для уведомлений от Alertmanager:
+```bash
+bash scripts/monitor.sh alert <server> <webhook-url>
+```
+
+#### `monitor query <promql> [--server <name>]`
+
+Выполнить PromQL-запрос:
+```bash
+bash scripts/monitor.sh query <server> "<promql>"
+```
+
+#### `monitor dashboard [--server <name>]`
+
+Показать текущие метрики (CPU, RAM, диск, контейнеры):
+```bash
+bash scripts/monitor.sh dashboard <server>
+```
+
+---
+
+### `/vps security` — Аудит безопасности
+
+**Подкоманды:**
+
+#### `security` или `security server [--server <name>]`
+
+Полный аудит безопасности сервера (SSH, firewall, fail2ban, updates, Docker):
+```bash
+bash scripts/security-scan.sh server <server>
+```
+Покажи результат с оценкой и рекомендациями.
+
+#### `security deps [--path <dir>]`
+
+Аудит зависимостей проекта (npm audit, pip-audit, bundler-audit):
+```bash
+bash scripts/security-scan.sh deps <server> [path]
+```
+
+#### `security ports [--server <name>]`
+
+Сканирование открытых портов (внешних и внутренних):
+```bash
+bash scripts/security-scan.sh ports <server>
+```
+
+#### `security docker [--server <name>]`
+
+Проверка безопасности Docker (привилегированные контейнеры, устаревшие образы):
+```bash
+bash scripts/security-scan.sh docker <server>
+```
+
+#### `security ssh [--server <name>]`
+
+Проверка hardening SSH:
+```bash
+bash scripts/security-scan.sh ssh <server>
+```
+
+#### `security ssl <domain>`
+
+Проверка TLS-конфигурации и security headers:
+```bash
+bash scripts/security-scan.sh ssl <domain>
+```
+
+---
+
+### `/vps cron` — Управление cron-задачами
+
+**Подкоманды:**
+
+#### `cron list [--server <name>]`
+
+Список всех управляемых cron-задач:
+```bash
+bash scripts/cron-manager.sh list <server>
+```
+
+#### `cron add <name> <schedule> <command> [--server <name>]`
+
+Добавить cron-задачу с автоматическим логированием:
+```bash
+bash scripts/cron-manager.sh add <server> <name> "<schedule>" "<command>"
+```
+Примеры расписания: `"0 2 * * *"` (каждый день в 2:00), `"*/5 * * * *"` (каждые 5 минут).
+
+#### `cron remove <name> [--server <name>]`
+
+Удалить cron-задачу:
+```bash
+bash scripts/cron-manager.sh remove <server> <name>
+```
+
+#### `cron logs <name> [--lines <n>] [--server <name>]`
+
+Просмотр логов cron-задачи:
+```bash
+bash scripts/cron-manager.sh logs <server> <name> [lines]
+```
+
+#### `cron run <name> [--server <name>]`
+
+Запустить задачу немедленно (вне расписания):
+```bash
+bash scripts/cron-manager.sh run <server> <name>
+```
+
+#### `cron status [--server <name>]`
+
+Статус всех задач (последний запуск, следующий запуск, ошибки):
+```bash
+bash scripts/cron-manager.sh status <server>
+```
+
+---
+
+### `/vps template` — Деплой из шаблонов
+
+**Подкоманды:**
+
+#### `template list`
+
+Покажи список доступных шаблонов:
+```bash
+# Прочитай файлы из templates/apps/*.yml
+# Покажи список: название, описание (из комментария в первой строке), usage
+```
+
+Доступные шаблоны:
+| Шаблон | Описание |
+|:-------|:---------|
+| `wordpress` | WordPress + MySQL |
+| `ghost` | Ghost — современная платформа для блога |
+| `plausible` | Plausible Analytics — приватная аналитика |
+| `uptime-kuma` | Uptime Kuma — мониторинг доступности |
+| `n8n` | n8n — автоматизация workflow (как Zapier) |
+
+#### `template deploy <name> --domain <domain> [--server <name>]`
+
+1. Прочитай шаблон из `templates/apps/<name>.yml`
+2. Сгенерируй необходимые секреты:
+   - `DB_PASSWORD`: `openssl rand -hex 16`
+   - `SECRET_KEY`: `openssl rand -hex 32`
+   - `DB_ROOT_PASSWORD`: `openssl rand -hex 16` (если требуется)
+3. Создай DNS-запись:
+   ```bash
+   bash scripts/cloudflare-dns.sh create <domain> <server-ip>
+   ```
+4. Подставь переменные в шаблон (`${DOMAIN}`, `${DB_PASSWORD}`, `${SECRET_KEY}`)
+5. Загрузи docker-compose на сервер через SSH:
+   ```bash
+   bash scripts/ssh-exec.sh --upload <server> <local-path> /opt/apps/<name>/docker-compose.yml
+   ```
+6. Запусти:
+   ```bash
+   bash scripts/ssh-exec.sh <server> "cd /opt/apps/<name> && docker compose up -d"
+   ```
+7. Дождись готовности:
+   ```bash
+   bash scripts/wait-ready.sh https://<domain> 120
+   ```
+8. Покажи результат с URL и credentials
+
+#### `template info <name>`
+
+Покажи подробную информацию о шаблоне: компоненты, ресурсы, переменные.
+
+---
+
+### `/vps notify` — Уведомления
+
+**Подкоманды:**
+
+#### `notify test [--server <name>]`
+
+Отправить тестовое уведомление во все настроенные каналы:
+```bash
+bash scripts/notify.sh test
+```
+
+#### `notify send <message> [--level <info|success|warning|error>]`
+
+Отправить сообщение во все настроенные каналы:
+```bash
+bash scripts/notify.sh send "<message>" [level]
+```
+
+#### `notify slack <webhook-url>`
+
+Настроить Slack webhook в конфиге:
+```json
+{
+  "notifications": {
+    "slack_webhook": "<webhook-url>"
+  }
+}
+```
+
+#### `notify telegram <bot-token> <chat-id>`
+
+Настроить Telegram бота в конфиге:
+```json
+{
+  "notifications": {
+    "telegram_bot_token": "<bot-token>",
+    "telegram_chat_id": "<chat-id>"
+  }
+}
+```
+
+#### `notify discord <webhook-url>`
+
+Настроить Discord webhook в конфиге:
+```json
+{
+  "notifications": {
+    "discord_webhook": "<webhook-url>"
+  }
+}
+```
+
+---
+
+### `/vps db-analyze` — Анализ производительности БД
+
+**Подкоманды:**
+
+#### `db-analyze stats <db-name> [--server <name>]`
+
+Статистика БД (размер, подключения, uptime):
+```bash
+bash scripts/db-analyze.sh stats <server> <db-type> <container-name>
+```
+
+#### `db-analyze slowlog <db-name> [--top <n>]`
+
+Топ медленных запросов (через pg_stat_statements / slow_log):
+```bash
+bash scripts/db-analyze.sh slowlog <server> <db-type> <container-name> [n]
+```
+
+#### `db-analyze indexes <db-name>`
+
+Анализ индексов (неиспользуемые, дублирующиеся, отсутствующие):
+```bash
+bash scripts/db-analyze.sh indexes <server> <db-type> <container-name>
+```
+
+#### `db-analyze tables <db-name>`
+
+Размеры таблиц и bloat:
+```bash
+bash scripts/db-analyze.sh tables <server> <db-type> <container-name>
+```
+
+#### `db-analyze connections <db-name>`
+
+Активные подключения и текущие запросы:
+```bash
+bash scripts/db-analyze.sh connections <server> <db-type> <container-name>
+```
+
+---
+
+### `/vps validate` — Валидация деплоя
+
+**Подкоманды:**
+
+#### `validate <url> [--server <name>]`
+
+Проверка health endpoint после деплоя:
+```bash
+bash scripts/deploy-validator.sh validate <server> <url>
+```
+
+#### `validate smoke <url> [--endpoints /api,/health,/]`
+
+Smoke-тесты нескольких эндпоинтов:
+```bash
+bash scripts/deploy-validator.sh smoke <server> <url> [endpoints]
+```
+
+#### `validate gate <url> [--max-latency <ms>] [--max-errors <n>]`
+
+Deployment gate (проверка latency и error rate):
+```bash
+bash scripts/deploy-validator.sh gate <server> <url> [max-latency] [max-errors]
+```
+Поддерживает `--auto-rollback` для автоматического отката при провале.
+
+---
+
 ### `/vps destroy` — Удаление проекта
 
 **Синтаксис:** `destroy <project-name> [--keep-db] [--keep-dns]`
@@ -544,6 +948,13 @@ references/stack-detection.md
 references/dokploy-api-reference.md (опционально, для справки по API)
 ```
 
+### Детальное описание v3-фич
+
+Для подробной информации о всех v3-возможностях (env, monitor, security, cron, template, notify, db-analyze, validate) прочитай:
+```
+references/v3-features-guide.md
+```
+
 ---
 
 ## Справка (когда $ARGUMENTS пусто)
@@ -551,7 +962,7 @@ references/dokploy-api-reference.md (опционально, для справк
 Покажи:
 
 ```
-VPS Ninja v2 — автоматизация VPS через Dokploy
+VPS Ninja v3 — автоматизация VPS через Dokploy
 
 Основные команды:
 
@@ -569,14 +980,72 @@ VPS Ninja v2 — автоматизация VPS через Dokploy
   /vps db delete <name>                   Удалить БД
   /vps logs <project> [--build]           Логи приложения или билда
 
+Переменные окружения:
+
+  /vps env list <app>                     Список переменных (секреты скрыты)
+  /vps env set <app> <key> <value>        Установить переменную
+  /vps env diff <app1> <app2>             Сравнить переменные двух приложений
+  /vps env export <app>                   Экспорт в .env файл
+  /vps env import <app> <file>            Импорт из .env файла
+  /vps env audit                          История изменений
+
 Мониторинг и безопасность:
 
   /vps health [server|app|docker|disk]    Проверка здоровья
   /vps health ssl <domain>               Проверить SSL-сертификат
+  /vps monitor enable                     Установить Prometheus + Grafana
+  /vps monitor status                     Статус мониторинга
+  /vps monitor dashboard                  Текущие метрики
+  /vps monitor query <promql>             PromQL-запрос
+  /vps security                           Полный аудит безопасности
+  /vps security deps                      Аудит зависимостей
+  /vps security ports                     Сканирование портов
+  /vps security docker                    Проверка Docker-безопасности
+  /vps security ssl <domain>              Проверка TLS и headers
+
+Бэкапы и откаты:
+
   /vps backup create <db-name>            Создать бэкап БД
   /vps backup restore <db-name>           Восстановить из бэкапа
   /vps backup list                        Список бэкапов
+  /vps backup cleanup [--keep N]          Ротация старых бэкапов
   /vps rollback <project>                 Откатить на предыдущий деплой
+
+Анализ БД:
+
+  /vps db-analyze stats <db>              Статистика БД
+  /vps db-analyze slowlog <db>            Топ медленных запросов
+  /vps db-analyze indexes <db>            Анализ индексов
+  /vps db-analyze tables <db>             Размеры таблиц
+  /vps db-analyze connections <db>        Активные подключения
+
+Шаблоны приложений:
+
+  /vps template list                      Доступные шаблоны
+  /vps template deploy <name> --domain D  Развернуть WordPress, Ghost, n8n и др.
+  /vps template info <name>               Информация о шаблоне
+
+Cron-задачи:
+
+  /vps cron list                          Список задач
+  /vps cron add <name> <schedule> <cmd>   Добавить задачу
+  /vps cron remove <name>                 Удалить задачу
+  /vps cron logs <name>                   Логи задачи
+  /vps cron run <name>                    Запустить вручную
+
+Уведомления:
+
+  /vps notify test                        Тестовое уведомление
+  /vps notify send <message>              Отправить сообщение
+  /vps notify slack <webhook>             Настроить Slack
+  /vps notify telegram <token> <chat>     Настроить Telegram
+  /vps notify discord <webhook>           Настроить Discord
+
+Валидация деплоя:
+
+  /vps validate <url>                     Health-check после деплоя
+  /vps validate smoke <url>               Smoke-тесты эндпоинтов
+  /vps validate gate <url>                Deployment gate (latency/errors)
 
 Прочее:
 
@@ -594,8 +1063,12 @@ VPS Ninja v2 — автоматизация VPS через Dokploy
 
   /vps setup 45.55.67.89 MyPassword123
   /vps deploy github.com/user/my-app --domain app.example.com
-  /vps health
-  /vps backup create my-app-db
-  /vps rollback my-app
-  /vps status --debug
+  /vps template deploy wordpress --domain blog.example.com
+  /vps env set my-app DATABASE_URL postgres://...
+  /vps monitor enable
+  /vps security
+  /vps cron add backup "0 2 * * *" "docker exec db pg_dump > /backups/db.sql"
+  /vps notify slack https://hooks.slack.com/...
+  /vps db-analyze slowlog my-db --top 10
+  /vps validate smoke https://app.example.com
 ```
