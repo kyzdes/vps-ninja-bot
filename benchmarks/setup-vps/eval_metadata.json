@@ -1,0 +1,11 @@
+{
+  "eval_id": 3,
+  "eval_name": "setup-vps",
+  "prompt": "/vps setup 185.22.64.10 MyR00tPass456",
+  "assertions": [
+    {"text": "Reads references/setup-guide.md from the skill directory", "passed": null, "evidence": ""},
+    {"text": "Does NOT search the web for how to install Dokploy", "passed": null, "evidence": ""},
+    {"text": "Attempts SSH connection to verify access", "passed": null, "evidence": ""},
+    {"text": "Asks user to create admin account in UI and provide API key", "passed": null, "evidence": ""}
+  ]
+}

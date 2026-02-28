@@ -1,0 +1,11 @@
+{
+  "eval_id": 2,
+  "eval_name": "auto-deploy-troubleshoot",
+  "prompt": "My app deployed earlier stopped updating when I push to main. How do I fix auto-deploy? Maybe I need to set up a webhook?",
+  "assertions": [
+    {"text": "Does NOT suggest adding a webhook to GitHub repository", "passed": null, "evidence": ""},
+    {"text": "Explains that GitHub App handles auto-deploy without webhooks", "passed": null, "evidence": ""},
+    {"text": "Suggests checking: GitHub App installation, autoDeploy flag, branch config", "passed": null, "evidence": ""},
+    {"text": "Does NOT search the web for how auto-deploy works", "passed": null, "evidence": ""}
+  ]
+}

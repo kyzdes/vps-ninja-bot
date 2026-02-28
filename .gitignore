@@ -1,0 +1,13 @@
+# Credentials
+config/servers.json
+
+# Dependencies
+mcp-server/node_modules/
+
+# OS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~

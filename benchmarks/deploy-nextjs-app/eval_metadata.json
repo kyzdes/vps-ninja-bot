@@ -1,0 +1,13 @@
+{
+  "eval_id": 1,
+  "eval_name": "deploy-nextjs-app",
+  "prompt": "/vps deploy github.com/kyzdes/my-nextjs-app --domain app.kyzdes.com",
+  "assertions": [
+    {"text": "Does NOT use WebSearch or WebFetch to look up Dokploy documentation", "passed": null, "evidence": ""},
+    {"text": "Reads deploy-guide.md and/or stack-detection.md from references/", "passed": null, "evidence": ""},
+    {"text": "Does NOT suggest setting up GitHub webhooks or refresh tokens for auto-deploy", "passed": null, "evidence": ""},
+    {"text": "Mentions that auto-deploy works via GitHub App", "passed": null, "evidence": ""},
+    {"text": "Uses environmentId when creating application", "passed": null, "evidence": ""},
+    {"text": "Creates DNS record with --no-proxy for Let's Encrypt", "passed": null, "evidence": ""}
+  ]
+}

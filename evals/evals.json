@@ -1,0 +1,99 @@
+{
+  "skill_name": "vps",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/vps deploy github.com/kyzdes/my-nextjs-app --domain app.kyzdes.com",
+      "expected_output": "The skill should: 1) Read deploy-guide.md (not search web), 2) Clone repo and detect Next.js stack, 3) Create project with environmentId, 4) Set up DNS with --no-proxy, 5) Deploy via API, 6) After deploy, mention that auto-deploy is active via GitHub App (NOT suggest webhook setup), 7) NOT search the web for Dokploy docs",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_web_search_for_docs",
+          "type": "negative",
+          "description": "Must NOT use WebSearch or WebFetch to look up Dokploy documentation"
+        },
+        {
+          "name": "reads_reference_files",
+          "type": "positive",
+          "description": "Must read deploy-guide.md and/or stack-detection.md from references/"
+        },
+        {
+          "name": "no_webhook_suggestion",
+          "type": "negative",
+          "description": "Must NOT suggest setting up GitHub webhooks, refresh tokens, or GitHub Actions for auto-deploy"
+        },
+        {
+          "name": "mentions_github_app_autodeploy",
+          "type": "positive",
+          "description": "Must mention that auto-deploy works via GitHub App and push to branch triggers deployment"
+        },
+        {
+          "name": "uses_environment_id",
+          "type": "positive",
+          "description": "Must use environmentId when creating application (v0.27+ requirement)"
+        },
+        {
+          "name": "dns_no_proxy",
+          "type": "positive",
+          "description": "Must create DNS record with --no-proxy flag for Let's Encrypt HTTP challenge"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "My app deployed earlier stopped updating when I push to main. How do I fix auto-deploy? Maybe I need to set up a webhook?",
+      "expected_output": "The skill should: 1) Read github-app-autodeploy.md reference, 2) Explain that webhooks are NOT needed with GitHub App, 3) Walk through troubleshooting: check GitHub App installation, check autoDeploy flag, check branch config, 4) NOT suggest creating webhook URLs or adding them to GitHub",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_webhook_suggestion",
+          "type": "negative",
+          "description": "Must NOT suggest adding a webhook to GitHub repository"
+        },
+        {
+          "name": "explains_github_app",
+          "type": "positive",
+          "description": "Must explain that GitHub App handles auto-deploy, webhooks not needed"
+        },
+        {
+          "name": "troubleshooting_steps",
+          "type": "positive",
+          "description": "Must suggest checking: GitHub App installation, autoDeploy flag, branch config"
+        },
+        {
+          "name": "no_web_search",
+          "type": "negative",
+          "description": "Must NOT search the web for how auto-deploy works in Dokploy"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "/vps setup 185.22.64.10 MyR00tPass456",
+      "expected_output": "The skill should: 1) Read setup-guide.md (not search web), 2) SSH to server, check resources, 3) Install Dokploy, 4) Wait for Dokploy to become available, 5) Ask user to create admin account in UI and provide API key, 6) Save config to servers.json, 7) Report completion with next steps",
+      "files": [],
+      "assertions": [
+        {
+          "name": "reads_setup_guide",
+          "type": "positive",
+          "description": "Must read references/setup-guide.md"
+        },
+        {
+          "name": "no_web_search",
+          "type": "negative",
+          "description": "Must NOT search the web for how to install Dokploy"
+        },
+        {
+          "name": "checks_ssh_access",
+          "type": "positive",
+          "description": "Must attempt SSH connection to verify access"
+        },
+        {
+          "name": "asks_for_api_key",
+          "type": "positive",
+          "description": "Must ask user to create admin account in UI and provide API key (not try to create via API)"
+        }
+      ]
+    }
+  ]
+}

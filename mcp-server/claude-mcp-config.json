@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "dokploy-docs": {
+      "command": "node",
+      "args": ["<path-to>/v3/mcp-server/index.js"],
+      "env": {}
+    }
+  }
+}

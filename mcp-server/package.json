@@ -1,0 +1,14 @@
+{
+  "name": "dokploy-docs-mcp",
+  "version": "1.0.0",
+  "description": "MCP server providing Dokploy documentation and API reference",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "build-docs": "node scripts/fetch-docs.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  }
+}

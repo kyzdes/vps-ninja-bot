@@ -1,0 +1,30 @@
+{
+  "expectations": [
+    {
+      "text": "Does NOT suggest adding a webhook to GitHub repository",
+      "passed": true,
+      "evidence": "The response explicitly states 'You do **not** need to set up a webhook' in the opening paragraph and reiterates at the end: 'You should not need to set up any webhooks.' The response never suggests adding a webhook URL to GitHub repository settings. Instead, it explains Dokploy's built-in GitHub App integration handles auto-deploy natively."
+    },
+    {
+      "text": "Explains that GitHub App handles auto-deploy without webhooks",
+      "passed": true,
+      "evidence": "Response explicitly states: 'Dokploy uses a built-in GitHub App integration that handles auto-deploy natively. When it is properly configured, every push to the configured branch (e.g., `main`) automatically triggers a deployment -- no webhooks, no refresh tokens, no GitHub Actions required.' This directly explains how the GitHub App handles auto-deploy without webhooks."
+    },
+    {
+      "text": "Suggests checking: GitHub App installation, autoDeploy flag, branch config",
+      "passed": true,
+      "evidence": "The response includes a 4-step troubleshooting checklist that covers all three items: (1) 'Verify the GitHub App is installed' with specific UI path (Settings > Server > GitHub), (2) 'Check that `autoDeploy` is enabled' with API commands to verify and enable, and (3) 'Confirm you are pushing to the correct branch' with API command to check configured branch. These are presented as the primary checks before other troubleshooting steps."
+    },
+    {
+      "text": "Does NOT search the web for how auto-deploy works",
+      "passed": true,
+      "evidence": "The transcript shows no use of web search tools (WebSearch or WebFetch). Instead, the agent read the local SKILL.md file and referenced documentation files (github-app-autodeploy.md, troubleshooting.md, deploy-guide.md) from the /references directory. The agent explicitly noted: 'No web searches or external documentation lookups were needed -- the skill's built-in references were sufficient.'"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.00
+  }
+}

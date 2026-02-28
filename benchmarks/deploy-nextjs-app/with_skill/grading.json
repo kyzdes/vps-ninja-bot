@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Does NOT use WebSearch or WebFetch to look up Dokploy documentation",
+      "passed": true,
+      "evidence": "Transcript shows references were loaded from local files (deploy-guide.md, stack-detection.md, etc.) at lines 19-25. No WebSearch or WebFetch calls mentioned. All documentation references are from the /references/ directory."
+    },
+    {
+      "text": "Reads deploy-guide.md and/or stack-detection.md from references/",
+      "passed": true,
+      "evidence": "Transcript explicitly states at lines 21-23: 'Read `references/deploy-guide.md` at `/Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/v3/references/deploy-guide.md` and Read `references/stack-detection.md` at `/Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/v3/references/stack-detection.md`' Both files are confirmed to exist in the filesystem."
+    },
+    {
+      "text": "Does NOT suggest setting up GitHub webhooks or refresh tokens for auto-deploy",
+      "passed": true,
+      "evidence": "Transcript at lines 382 and 399-401 explicitly states: 'No webhook setup, no refresh tokens, no GitHub Actions needed. The GitHub App installed in Dokploy handles auto-deploy natively.' and 'Auto-deploy: Active via GitHub App. Push to `main` to trigger a new deployment automatically. No webhooks or GitHub Actions needed.'"
+    },
+    {
+      "text": "Mentions that auto-deploy works via GitHub App",
+      "passed": true,
+      "evidence": "Transcript and report mention GitHub App multiple times. Line 382: 'The GitHub App installed in Dokploy handles auto-deploy natively.' Line 399: 'Auto-deploy: Active via GitHub App' Deploy-report.md line 36: 'Active via GitHub App. Push to `main` to trigger a new deployment automatically.'"
+    },
+    {
+      "text": "Uses environmentId when creating application",
+      "passed": true,
+      "evidence": "Transcript at lines 210-214 shows the application.create call uses 'environmentId': '{\\n  \"name\": \"my-nextjs-app\",\\n  \"projectId\": \"proj-abc123def456\",\\n  \"environmentId\": \"env-789ghi012jkl\"\\n}' This environmentId was extracted from the project.create response at line 193."
+    },
+    {
+      "text": "Creates DNS record with --no-proxy for Let's Encrypt",
+      "passed": true,
+      "evidence": "Transcript at lines 275-279 shows: 'Would run: bash /Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/v3/scripts/cloudflare-dns.sh create app.kyzdes.com 77.90.43.8 --no-proxy' and 'Note: `--no-proxy` is critical. CloudFlare proxy intercepts the HTTP challenge and prevents Let's Encrypt certificate issuance.' Deploy-report.md line 25: 'DNS record: app.kyzdes.com -> 77.90.43.8 (CloudFlare, proxy OFF for Let's Encrypt)'"
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  }
+}

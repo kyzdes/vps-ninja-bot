@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Does NOT use WebSearch or WebFetch to look up Dokploy documentation",
+      "passed": false,
+      "evidence": "The transcript explicitly documents a Research Phase (lines 15-59) where it 'searched the web for information' and 'fetched and read the Dokploy API reference' and 'fetched the CloudFlare-specific Dokploy documentation'. Multiple web searches and page fetches from dokploy.com are documented."
+    },
+    {
+      "text": "Reads deploy-guide.md and/or stack-detection.md from references/",
+      "passed": false,
+      "evidence": "There is no mention in the transcript of reading any files from a references/ directory. The transcript relies entirely on web searches and fetches from external documentation, not local reference files."
+    },
+    {
+      "text": "Does NOT suggest setting up GitHub webhooks or refresh tokens for auto-deploy",
+      "passed": true,
+      "evidence": "While webhooks are mentioned in line 56 as 'For other Git providers, a webhook URL is provided', the transcript correctly states for GitHub (the provider being used): 'no additional configuration needed' (line 112) and 'No manual webhook configuration is needed -- the GitHub App handles this' (line 112). No GitHub webhooks or refresh tokens are suggested for the GitHub auto-deploy setup."
+    },
+    {
+      "text": "Mentions that auto-deploy works via GitHub App",
+      "passed": true,
+      "evidence": "The transcript explicitly mentions GitHub App multiple times: 'Built-in GitHub integration' (line 54), 'GitHub App handles this' (line 112), and 'Install the Dokploy GitHub App on your GitHub account or organization' (line 85). The connection between auto-deploy and GitHub App is clearly established."
+    },
+    {
+      "text": "Uses environmentId when creating application",
+      "passed": true,
+      "evidence": "In the API-Based Deployment section (line 219), the transcript shows creating an application with: '{\"name\": \"my-nextjs-app\", \"environmentId\": \"ENV_ID_HERE\"}'. The environmentId parameter is included when creating the application."
+    },
+    {
+      "text": "Creates DNS record with --no-proxy for Let's Encrypt",
+      "passed": false,
+      "evidence": "In the DNS configuration section (Step 6, lines 116-127), the transcript explicitly states to configure the DNS record with 'Proxy status: Proxied (orange cloud)' (line 125), which is the opposite of --no-proxy. For Let's Encrypt to work with CloudFlare, --no-proxy (gray cloud) would be required, but the transcript recommends proxied."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 3,
+    "total": 6,
+    "pass_rate": 0.50
+  }
+}

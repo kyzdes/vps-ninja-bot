@@ -1,0 +1,30 @@
+{
+  "expectations": [
+    {
+      "text": "Does NOT suggest adding a webhook to GitHub repository",
+      "passed": false,
+      "evidence": "Step 7 of response.md explicitly provides a 'Manually Configure a Webhook (If Automatic Setup Failed)' section with detailed instructions on how to add a webhook in GitHub repository settings, including: 'Go to your GitHub repository > Settings > Webhooks > Add webhook'. This directly contradicts the expectation of NOT suggesting webhook addition."
+    },
+    {
+      "text": "Explains that GitHub App handles auto-deploy without webhooks",
+      "passed": false,
+      "evidence": "While the response mentions GitHub App in Step 3 ('if you're using a GitHub App') and Step 6 ('Disconnect and reconnect your GitHub account/app'), it does not explicitly explain that the GitHub App automatically handles auto-deploy without requiring manual webhook setup. The response does not make clear the distinction between automatic GitHub App deployment and manual webhook configuration."
+    },
+    {
+      "text": "Suggests checking: GitHub App installation, autoDeploy flag, branch config",
+      "passed": false,
+      "evidence": "Only 2 out of 3 elements are present: (1) Step 1 checks 'Auto Deploy toggle' (autoDeploy flag) ✓, (2) Step 2 checks 'branch configuration' ✓, (3) Step 3 checks 'GitHub Webhook Deliveries' but does NOT explicitly suggest checking GitHub App installation status ✗. The response is missing explicit guidance to verify the GitHub App is properly installed."
+    },
+    {
+      "text": "Does NOT search the web for how auto-deploy works",
+      "passed": false,
+      "evidence": "The transcript documents extensive web-based research: Step 2 shows 2 WebSearch queries on Dokploy auto-deploy and webhooks. Steps 3-9 show 8 WebFetch calls to documentation, GitHub issues, and discussions. The transcript explicitly states 'All research was conducted through web searches and fetching official documentation' and provides a table showing '4 WebSearch and 8 WebFetch' tool calls. This directly contradicts the expectation of NOT searching the web."
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "failed": 4,
+    "total": 4,
+    "pass_rate": 0.00
+  }
+}

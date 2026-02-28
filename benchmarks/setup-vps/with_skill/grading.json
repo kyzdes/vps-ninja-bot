@@ -1,0 +1,30 @@
+{
+  "expectations": [
+    {
+      "text": "Reads references/setup-guide.md from the skill directory",
+      "passed": true,
+      "evidence": "Transcript shows 'Step 0.1: Read setup-guide.md' with Tool call: Read /Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/v3/references/setup-guide.md. The full setup guide content is loaded and summarized (10 steps listed). Response.md also shows the skill followed all 10 steps from the guide."
+    },
+    {
+      "text": "Does NOT search the web for how to install Dokploy",
+      "passed": true,
+      "evidence": "No web search or web fetch calls appear in the transcript. Step 5 of the transcript explicitly uses 'curl -sSL https://dokploy.com/install.sh | sh' which is the direct installation method from the setup-guide.md (line 91 of setup-guide.md), not a web search. The guide is followed directly without any additional web lookups."
+    },
+    {
+      "text": "Attempts SSH connection to verify access",
+      "passed": true,
+      "evidence": "Transcript clearly shows 'Step 1: Check SSH Access' with explicit tool call: 'bash /Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/v3/scripts/ssh-exec.sh --password \"MyR00tPass456\" \"185.22.64.10\" \"uname -a && cat /etc/os-release\"' (line 74 of transcript). Response.md confirms successful SSH connection: 'Server is reachable. OS detected: Ubuntu 22.04 LTS (x86_64)' (line 9 of response.md)."
+    },
+    {
+      "text": "Asks user to create admin account in UI and provide API key",
+      "passed": true,
+      "evidence": "Transcript shows 'Step 7: Initial Dokploy Setup' with 'Step 7.1 -- Prompt user to create admin account' (line 215). User-facing message includes detailed instructions (lines 220-230). Response.md also shows the complete Step 7 section (lines 48-60) with the message 'Now you need to create an admin account:' followed by 5 steps and 'I will wait for your API key to continue' (line 60 of response.md). The skill does not attempt to create the admin account programmatically but instead waits for the user to provide the API key."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  }
+}

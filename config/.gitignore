@@ -1,0 +1,8 @@
+# Ignore all files in config directory (contains secrets)
+*
+
+# But track this .gitignore file
+!.gitignore
+
+# And track the example/template file
+!servers.json.example
