@@ -25,13 +25,13 @@ VPS Ninja is a [Claude Code skill](https://docs.anthropic.com/en/docs/claude-cod
 
 ```bash
 # Clone and symlink (auto-updates on git pull)
-git clone https://github.com/kyzdes/vps-ninja-bot.git ~/vps-ninja
+git clone https://github.com/kyzdes/vps-ninja.git ~/vps-ninja
 ln -s ~/vps-ninja ~/.claude/skills/vps
 ```
 
 Or copy directly:
 ```bash
-git clone https://github.com/kyzdes/vps-ninja-bot.git /tmp/vps-ninja
+git clone https://github.com/kyzdes/vps-ninja.git /tmp/vps-ninja
 mkdir -p ~/.claude/skills
 cp -r /tmp/vps-ninja ~/.claude/skills/vps
 ```
