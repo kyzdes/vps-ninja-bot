@@ -1,0 +1,259 @@
+/* ============================================================================
+   Dokpilot · CALM  —  the default visual direction (from Claude Design handoff)
+   ----------------------------------------------------------------------------
+   A quieter, corporate, Linear-leaning re-skin of the dashboard. Loaded AFTER
+   app.css as an OVERRIDE layer: it redefines the shared design tokens (so every
+   existing rule re-renders calm automatically) and overrides the handful of
+   rules that carried the old neon/CRT character. app.css keeps the original
+   neon-green palette intact — remove the calm.css <link> (or set a different
+   theme) to fall back to it. This reverses decision D-013 ("keep neon-green");
+   neon now lives on as a non-default theme.
+
+   Themeable on <html>:
+     data-theme="dark" | "light"
+     data-accent="emerald" | "iris" | "copper" | "steel"
+     data-motion="on" | "off"
+
+   Philosophy: confidence through restraint and craft, not glow. Graphite
+   surfaces, one low-chroma accent used sparingly, generous type, hairline
+   structure, soft shadows, mono demoted to true code only.
+   ========================================================================== */
+
+/* ── Shared tokens (theme-independent) ───────────────────────────────── */
+:root {
+  /* Accent tints derive generically from --accent via color-mix, so switching
+     accent only needs --accent + --accent-on. */
+  --accent-soft:  color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-line:  color-mix(in srgb, var(--accent) 30%, transparent);
+  --accent-glow:  transparent;                 /* kills every neon glow at once */
+  --accent-hover: color-mix(in oklab, var(--accent), white 9%);
+
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 11px;
+  --tracking-label: 0.04em;
+  --motion-fast: 90ms; --motion-base: 170ms;
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+
+  /* Segmented-control selected look — neutral & lifted (read by ModeToggle JS) */
+  --seg-on-bg: var(--surface-hover);
+  --seg-on-fg: var(--fg);
+  --seg-on-shadow: 0 1px 2px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.05);
+
+  /* Default accent: emerald (the brand thread, calmed right down) */
+  --accent: #2faa76;  --accent-on: #06150e;
+}
+:root[data-accent="iris"]   { --accent: #5d63d6; --accent-on: #ffffff; }
+:root[data-accent="copper"] { --accent: #c2854f; --accent-on: #1a1206; }
+:root[data-accent="steel"]  { --accent: #5683c9; --accent-on: #ffffff; }
+
+/* ── Dark theme (default) ────────────────────────────────────────────── */
+:root, :root[data-theme="dark"] {
+  --bg: #0c0d0f;
+  --bg-elevated: #101115;
+  --surface: #141519;
+  --surface-warm: #16171b;
+  --surface-2: #181a1f;
+  --surface-hover: #1c1e23;
+  --border: #25262b;
+  --border-soft: #1d1e23;
+  --border-strong: #303138;
+  --fg: #ededef;
+  --fg-2: #a1a3aa;
+  --muted: #6d6f78;
+  --meta: #4a4c54;
+  --log-canvas: #0a0b0d;
+  --log-fg: #d4d6da;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.025);
+  --elev-raised: 0 8px 24px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.4);
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg: #fbfbfc;
+  --bg-elevated: #f6f6f8;
+  --surface: #ffffff;
+  --surface-warm: #fcfcfd;
+  --surface-2: #ffffff;
+  --surface-hover: #f3f3f5;
+  --border: #e8e8ec;
+  --border-soft: #f0f0f3;
+  --border-strong: #dcdce1;
+  --fg: #18191c;
+  --fg-2: #5c5e66;
+  --muted: #86888f;
+  --meta: #a9abb1;
+  --log-canvas: #0e0f12;   /* terminal stays dark even in light mode */
+  --log-fg: #d4d6da;
+  --shadow-card: 0 1px 2px rgba(20,22,40,.05), 0 1px 0 rgba(20,22,40,.02);
+  --elev-raised: 0 12px 32px rgba(20,22,40,.14), 0 2px 8px rgba(20,22,40,.08);
+  --seg-on-bg: #ffffff;
+  --seg-on-shadow: 0 1px 2px rgba(20,22,40,.1), 0 0 0 1px rgba(20,22,40,.04);
+}
+:root[data-theme="light"] .topbar { background: color-mix(in srgb, var(--bg) 80%, transparent); }
+
+/* ── Demote the monospace: sans carries the UI; mono is for code only ──── */
+.sb-word { font-family: var(--font-body); font-weight: 650; letter-spacing: -.025em; font-size: 14.5px; }
+.app-name { font-family: var(--font-body); font-weight: 560; letter-spacing: -.012em; }
+.dim-mono, .topbar-crumb, .sb-ver, .tag-mini { font-family: var(--font-body); letter-spacing: 0; }
+.badge, .pill, .meta-chip, .cmdk-hint { font-family: var(--font-body); }
+.stat-num, .num, .meter-top .meter-val { font-family: var(--font-body); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+/* Micro-labels: gentle sans, not shouty uppercase mono */
+.nav-group-label, .section-label, .col-head, .cmdk-sec {
+  font-family: var(--font-body); text-transform: none; letter-spacing: .01em;
+  font-weight: 560; color: var(--muted); font-size: var(--text-sm);
+}
+/* Kept in mono on purpose: .mono, .log-viewer, .codeblock, .ds-code, .step-meta */
+
+/* ── Surfaces & elevation ────────────────────────────────────────────── */
+.card { box-shadow: var(--shadow-card); border-radius: var(--radius-lg); }
+.stat-tile { box-shadow: var(--shadow-card); }
+.topbar { backdrop-filter: blur(12px) saturate(1.4); }
+
+/* ── Sidebar / nav — flat, no glowing accent bar ─────────────────────── */
+.sb-glyph { box-shadow: none; border-radius: 8px; font-family: var(--font-body); font-weight: 700; }
+.nav-item.active { background: var(--surface-hover); }
+.nav-item.active::before { display: none; }   /* drop the CRT left-bar */
+.nav-item.active .icon { color: var(--accent); }
+
+/* ── Buttons — soft, corporate, no neon ──────────────────────────────── */
+.btn { border-radius: var(--radius-md); font-weight: 540; }
+.btn-primary { box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+/* ── Segmented mode toggle — neutral lifted, not accent-filled ─────────
+   The product's app.css fills the selected segment with --accent (the old
+   neon look). Calm wants a quiet neutral-lifted segment instead — override
+   it here so both the Simple/Advanced and the new Theme toggle read calm. */
+.mode-toggle { background: var(--bg-elevated); }
+.mode-opt[aria-pressed="true"] {
+  background: var(--seg-on-bg); color: var(--seg-on-fg); box-shadow: var(--seg-on-shadow);
+}
+.mode-opt[aria-pressed="true"] .icon { color: var(--accent); }
+
+/* ── Settings → Appearance: accent swatches ────────────────────────────
+   A row of low-chroma colour chips; the selected one carries the focus ring. */
+.accent-swatch {
+  width: 26px; height: 26px; border-radius: 7px; padding: 0; cursor: pointer;
+  background: var(--sw); border: 1px solid var(--border-strong);
+  transition: box-shadow var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+}
+.accent-swatch:hover { transform: translateY(-1px); }
+.accent-swatch[aria-pressed="true"] { box-shadow: var(--focus-ring); border-color: var(--sw); }
+
+/* ── Inputs / focus ──────────────────────────────────────────────────── */
+.input, .select, .textarea { border-radius: var(--radius-md); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SIMPLIFY  —  Linear-grade restraint. Far fewer colours, two button types,
+   status reduced to one small dot, fewer dividers. Accent now appears only on
+   primary actions, the active-nav icon, focus rings, links and the Claude spark.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Status: a single muted dot + neutral text. Drop every coloured pill fill,
+   border and glow — this is what made the UI read "multicoloured". */
+.dot, .dot-success, .dot-info, .dot-warning, .dot-danger { box-shadow: none; }
+.badge { background: transparent !important; border: 0 !important; padding: 0;
+  height: auto; font-weight: 500; gap: 7px; color: var(--fg-2); }
+.badge .lbl { color: var(--fg-2); }
+
+/* Pills: one quiet neutral style (no accent-tinted "key" pill) */
+.pill, .pill-key { background: transparent; border-color: var(--border); color: var(--muted); }
+
+/* Buttons: exactly two — primary (accent) and secondary (neutral). Everything
+   else collapses into secondary so there's one consistent control. */
+.btn-primary { box-shadow: none; }
+.btn-ghost { background: var(--surface); border-color: var(--border); color: var(--fg-2); }
+.btn-ghost:hover { background: var(--surface-hover); }
+.btn-danger { color: var(--fg-2); border-color: var(--border); }
+.btn-danger:hover { color: var(--danger); background: var(--surface-hover); border-color: var(--border-strong); }
+.ask-claude { background: var(--surface); border-color: var(--border); color: var(--fg-2); height: 30px; }
+.ask-claude:hover { background: var(--surface-hover); box-shadow: none; }
+.ask-claude .icon { color: var(--muted); }
+
+/* Numbers are facts, not colour — drop the accent stat number */
+.stat-tile.accent .stat-num { color: var(--fg); }
+
+/* Callouts: neutral surfaces, no coloured washes. Accent survives only on the
+   Claude spark icon. */
+.callout, .callout.ai, .callout.warn {
+  background: var(--surface) !important; border-color: var(--border) !important;
+  color: var(--fg-2); box-shadow: none;
+}
+.callout.ai .icon { color: var(--accent); }
+.callout.warn .icon { color: var(--muted); }
+
+/* Neutralise the accent-tinted hero / "deploy complete" cards (set inline) */
+.card[style*="accent-soft"] { background: var(--surface) !important; border-color: var(--border) !important; }
+
+/* Fewer dividers — let whitespace do the separating. Keep the header
+   comfortably padded so action buttons (Add server / Add token) breathe. */
+.card-head { border-bottom: 0; padding-top: var(--space-5); padding-bottom: var(--space-3); }
+/* When the header carries an action button, give it a touch more room and a
+   consistent gap before the first row. */
+.card-head:has(.btn) { padding-top: 14px; padding-bottom: 14px; }
+.lrow { border-top-color: var(--border-soft); }
+/* First row after a header shouldn't hug it */
+.card-head + .lrow, .card-head + .col-head { padding-top: var(--space-4); }
+
+/* ── Comfortable density pass (applies to every screen) ────────────────
+   Calm is a corporate, roomy layout — give list rows, inline add-forms and
+   stacks a consistent, generous rhythm instead of the dense operator spacing. */
+.lrow { padding-top: 13px; padding-bottom: 13px; gap: var(--space-4); }
+/* Inline add/edit rows hold 40px inputs — let them sit centred with real room */
+.lrow:has(.input) { padding-top: 14px; padding-bottom: 14px; }
+.card-pad { padding: var(--space-5) var(--space-5) var(--space-6); }
+.stack { gap: var(--space-4); }
+.page-intro { margin-bottom: var(--space-6); }
+/* Meter + form groups inside cards */
+.field + .field { margin-top: var(--space-4); }
+/* Master-detail list items */
+.md-item { padding: 12px 14px; }
+.md-list { gap: 4px; }
+
+/* Selection: a faint neutral, not accent */
+::selection { background: color-mix(in srgb, var(--fg) 14%, transparent); }
+
+/* The one surviving bit of signal colour: muted status dots */
+:root, :root[data-theme="dark"] { --success:#5aa57f; --warn:#c39a55; --danger:#cc7070; --info:#7090c0; }
+:root[data-theme="light"]      { --success:#3f8a64; --warn:#9c7b34; --danger:#bd5a5a; --info:#5277b0; }
+
+/* Tweaks → Animations off: cut all motion (respect the user's choice) */
+[data-motion="off"] *, [data-motion="off"] *::before, [data-motion="off"] *::after {
+  transition: none !important; animation: none !important; scroll-behavior: auto !important;
+}
+
+/* UX: with coloured pills gone, give FAILURES alone a whisper of red so a
+   broken app is never missed in the monochrome list. */
+.badge-danger .lbl { color: var(--danger); }
+
+/* ── Glance strip — compact at-a-glance counts on the page-intro row ────
+   Replaces the four big stat tiles. Quiet, right-aligned, tappable. */
+.page-intro { display: flex; align-items: center; gap: 20px; }
+/* When a glance strip is present, lay the intro on the SAME 2fr/1fr grid as the
+   content below so the strip sits as a tidy bar aligned over the right rail
+   (and the New deploy button), flush on both edges. */
+.page-intro:has(.glance-strip) { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4); align-items: center; }
+.page-intro:has(.glance-strip) .grow { min-width: 0; }
+.glance-strip {
+  flex: none; width: 100%; display: flex; align-items: stretch; gap: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden;
+}
+.glance {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 7px 12px; background: transparent; border: 0; cursor: pointer;
+  transition: background var(--motion-fast) var(--ease); text-align: center;
+}
+.glance:hover { background: var(--surface-hover); }
+.glance-n { font-size: var(--text-xl); font-weight: 600; line-height: 1.05; color: var(--fg); font-variant-numeric: tabular-nums; }
+.glance-l { font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
+.glance.accent .glance-n { color: var(--accent); }
+.glance.alert .glance-n { color: var(--danger); }
+.glance.alert .glance-l { color: var(--danger); }
+.glance-sep { width: 1px; background: var(--border-soft); margin: 8px 0; flex: none; }
+
+@media (max-width: 720px) {
+  .page-intro { flex-wrap: wrap; }
+  .glance-strip { width: 100%; }
+  .glance { flex: 1; }
+}

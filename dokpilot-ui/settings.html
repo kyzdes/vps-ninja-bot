@@ -1,15 +1,17 @@
 <!doctype html>
-<html lang="en" data-mode="simple" data-sidebar="expanded">
+<html lang="en" data-mode="simple" data-sidebar="expanded" data-theme="dark" data-accent="emerald">
 <head>
+<script>(function(){try{var d=document.documentElement,s=localStorage;var t=s.getItem('dokpilot:theme');if(t)d.setAttribute('data-theme',t);var a=s.getItem('dokpilot:accent');if(a)d.setAttribute('data-accent',a);var m=s.getItem('dokpilot:motion');if(m)d.setAttribute('data-motion',m);}catch(e){}})();</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dokpilot · Settings</title>
 <meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;450;500;560;600;650;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/app.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%2339ff14%22/></svg>">
+<link rel="stylesheet" href="assets/calm.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%232faa76%22/></svg>">
 <style>
   .set-row { display:flex; align-items:center; gap:16px; padding:14px var(--space-5); border-top:1px solid var(--border-soft); }
   .set-row:first-child { border-top:0; }
@@ -72,7 +74,23 @@
         </div>
         <div class="set-row">
           <div class="grow"><div class="set-name">Theme</div><div class="set-desc">Dark is the Dokpilot default. Light ships as a fallback.</div></div>
-          <span class="badge badge-muted">Dark</span>
+          <div class="mode-toggle" id="set-theme" role="group" aria-label="Theme">
+            <button class="mode-opt" data-theme="dark" aria-pressed="true"><span>Dark</span></button>
+            <button class="mode-opt" data-theme="light" aria-pressed="false"><span>Light</span></button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="grow"><div class="set-name">Accent</div><div class="set-desc">One low-chroma colour for primary actions, links and focus. Calm emerald by default.</div></div>
+          <div class="row" id="set-accent" style="gap:8px" role="group" aria-label="Accent">
+            <button class="accent-swatch" data-accent="emerald" style="--sw:#2faa76" title="Emerald" aria-pressed="true"></button>
+            <button class="accent-swatch" data-accent="iris" style="--sw:#5d63d6" title="Iris" aria-pressed="false"></button>
+            <button class="accent-swatch" data-accent="copper" style="--sw:#c2854f" title="Copper" aria-pressed="false"></button>
+            <button class="accent-swatch" data-accent="steel" style="--sw:#5683c9" title="Steel" aria-pressed="false"></button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="grow"><div class="set-name">Animations</div><div class="set-desc">Motion on status dots, streaming logs and transitions. Off respects reduced-motion.</div></div>
+          <label class="switch"><input type="checkbox" id="anim-toggle" checked><span class="track"></span></label>
         </div>
         <div class="set-row">
           <div class="grow"><div class="set-name">Collapse sidebar by default</div><div class="set-desc">Start with the icon-only rail to maximise screen space.</div></div>
@@ -168,6 +186,38 @@ window.pageInit = ({ el, icon, toast, DATA }) => {
     localStorage.setItem("dokpilot:sidebar", v);
     document.documentElement.dataset.sidebar = v;
   });
+
+  // ── Appearance (Calm design system) — theme / accent / motion ─────────
+  // Persisted to localStorage; the no-FOUC bootstrap in each page's <head>
+  // re-applies these before paint. calm.css re-themes entirely from the
+  // data-theme / data-accent / data-motion attributes on <html>.
+  const root = document.documentElement;
+  const pressed = (group, key, val) =>
+    group.querySelectorAll("[data-" + key + "]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset[key] === val)));
+
+  // Theme (dark | light)
+  const themeGroup = document.getElementById("set-theme");
+  const applyTheme = (t) => { root.setAttribute("data-theme", t); localStorage.setItem("dokpilot:theme", t); pressed(themeGroup, "theme", t); };
+  themeGroup.querySelectorAll(".mode-opt").forEach(b => b.addEventListener("click", () => {
+    applyTheme(b.dataset.theme);
+    toast(b.dataset.theme === "dark" ? "Dark theme" : "Light theme", "settings");
+  }));
+  applyTheme(localStorage.getItem("dokpilot:theme") || root.getAttribute("data-theme") || "dark");
+
+  // Accent (emerald | iris | copper | steel)
+  const accentGroup = document.getElementById("set-accent");
+  const applyAccent = (a) => { root.setAttribute("data-accent", a); localStorage.setItem("dokpilot:accent", a); pressed(accentGroup, "accent", a); };
+  accentGroup.querySelectorAll(".accent-swatch").forEach(b => b.addEventListener("click", () => {
+    applyAccent(b.dataset.accent);
+    toast("Accent · " + b.title, "settings");
+  }));
+  applyAccent(localStorage.getItem("dokpilot:accent") || root.getAttribute("data-accent") || "emerald");
+
+  // Animations (motion on | off)
+  const anim = document.getElementById("anim-toggle");
+  const applyMotion = (on) => { root.setAttribute("data-motion", on ? "on" : "off"); localStorage.setItem("dokpilot:motion", on ? "on" : "off"); anim.checked = on; };
+  anim.addEventListener("change", () => applyMotion(anim.checked));
+  applyMotion((localStorage.getItem("dokpilot:motion") || "on") === "on");
 };
 </script>
 </body>

@@ -1,15 +1,17 @@
 <!doctype html>
-<html lang="en" data-mode="simple" data-sidebar="expanded">
+<html lang="en" data-mode="simple" data-sidebar="expanded" data-theme="dark" data-accent="emerald">
 <head>
+<script>(function(){try{var d=document.documentElement,s=localStorage;var t=s.getItem('dokpilot:theme');if(t)d.setAttribute('data-theme',t);var a=s.getItem('dokpilot:accent');if(a)d.setAttribute('data-accent',a);var m=s.getItem('dokpilot:motion');if(m)d.setAttribute('data-motion',m);}catch(e){}})();</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dokpilot · Overview</title>
 <meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;450;500;560;600;650;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/app.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%2339ff14%22/><text x=%2216%22 y=%2223%22 font-family=%22monospace%22 font-size=%2220%22 font-weight=%22700%22 text-anchor=%22middle%22 fill=%22%23061a02%22>d</text></svg>">
+<link rel="stylesheet" href="assets/calm.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%232faa76%22/><text x=%2216%22 y=%2223%22 font-family=%22monospace%22 font-size=%2220%22 font-weight=%22700%22 text-anchor=%22middle%22 fill=%22%23061a02%22>d</text></svg>">
 </head>
 <body>
 <div class="layout" data-page="overview">
@@ -58,6 +60,16 @@
         <div class="grow">
           <p class="page-lead" data-lead-slot=""><span data-adv="">Everything running across your servers, at a glance.</span><span data-simple="">Welcome back. Here's what's live and what needs you.</span></p>
         </div>
+        <!-- Calm: compact at-a-glance strip (replaces the 4 stat tiles), data-driven in pageInit -->
+        <div class="glance-strip" id="glance" data-fallback="">
+          <button class="glance accent"><span class="glance-n">3</span><span class="glance-l">Live</span></button>
+          <div class="glance-sep"></div>
+          <button class="glance"><span class="glance-n">1</span><span class="glance-l">Building</span></button>
+          <div class="glance-sep"></div>
+          <button class="glance"><span class="glance-n">1</span><span class="glance-l">Attention</span></button>
+          <div class="glance-sep" data-adv=""></div>
+          <button class="glance" data-adv=""><span class="glance-n">2</span><span class="glance-l">Servers</span></button>
+        </div>
       </div>
 
       <!-- SIMPLE: one obvious action -->
@@ -71,8 +83,6 @@
         </div>
       </section>
 
-      <!-- stat tiles -->
-      <div class="grid grid-4 mb-4" id="stat-tiles" data-fallback=""><div class="stat-tile accent"><div class="stat-top"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></span><span><span data-adv="">Apps running</span><span data-simple="">Live now</span></span></div><div class="stat-num">3</div><div class="stat-sub">across 2 servers</div></div><div class="stat-tile "><div class="stat-top"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l4 4-4 4"></path><path d="M4 12h12"></path><path d="M4 20l4-4-4-4"></path></svg></span>Building</div><div class="stat-num">1</div><div class="stat-sub">1 deploy in progress</div></div><div class="stat-tile "><div class="stat-top"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3z"></path><line x1="12" y1="10" x2="12" y2="15"></line><line x1="12" y1="18" x2="12" y2="18.5"></line></svg></span><span><span data-adv="">Needs attention</span><span data-simple="">Needs you</span></span></div><div class="stat-num">1</div><div class="stat-sub">metrics-collector failed</div></div><div class="stat-tile " data-adv=""><div class="stat-top"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"></rect><rect x="3" y="13" width="18" height="7" rx="1.5"></rect><circle cx="6.5" cy="7.5" r=".7" fill="currentColor"></circle><circle cx="6.5" cy="16.5" r=".7" fill="currentColor"></circle></svg></span>Servers</div><div class="stat-num">2</div><div class="stat-sub">all healthy</div></div></div>
 
       <div class="grid grid-2-1">
         <div class="stack">
@@ -123,45 +133,42 @@ window.pageInit = ({ el, icon, badge, DATA, go }) => {
   const building = apps.filter(a => a.status === "building").length;
   const attention = apps.filter(a => a.status === "error").length;
 
-  // stat tiles
-  const tile = (ic, label, num, sub, cls="") => el("div", { class:"stat-tile " + cls },
-    el("div", { class:"stat-top" }, icon(ic, 15), label),
-    el("div", { class:"stat-num" }, num),
-    el("div", { class:"stat-sub" }, sub));
-  const tiles = document.getElementById("stat-tiles");
-  tiles.append(
-    tile("apps", el("span", null, el("span",{ "data-adv":"" },"Apps running"), el("span",{ "data-simple":"" },"Live now")), live, "across " + DATA.servers.length + " servers", "accent"),
-    tile("deploy", "Building", building, building ? "1 deploy in progress" : "nothing building"),
-    // "Needs attention" subtitle: name the first failing app, fall back to count when ≥2
-    tile("warn", el("span", null, el("span",{ "data-adv":"" },"Needs attention"), el("span",{ "data-simple":"" },"Needs you")), attention,
-      (() => {
-        if (attention === 0) return "all healthy";
-        const broken = apps.filter(a => a.status === "error");
-        if (broken.length === 1) return broken[0].name + " failed";
-        return broken.length + " apps in error";
-      })()),
+  // Calm: compact at-a-glance strip (replaces the four stat tiles). Same
+  // counts, same live-homeStats override — just a quieter, tighter presentation
+  // that aligns over the right rail.
+  const glanceEl = document.getElementById("glance");
+  const glance = (n, label, cls, href) => el("button", { class:"glance" + (cls ? " " + cls : ""), onclick: () => { location.href = href; } },
+    el("span", { class:"glance-n" }, String(n)),
+    el("span", { class:"glance-l" }, label));
+  const gsep = (adv) => el("div", adv ? { class:"glance-sep", "data-adv":"" } : { class:"glance-sep" });
+  const srvGlance = glance(DATA.servers.length, "Servers", "", "servers.html");
+  srvGlance.setAttribute("data-adv", "");
+  glanceEl.innerHTML = "";
+  glanceEl.append(
+    glance(live, "Live", "accent", "projects.html"),
+    gsep(),
+    glance(building, "Building", "", "logs.html"),
+    gsep(),
+    glance(attention, "Attention", attention ? "alert" : "", "projects.html"),
+    gsep(true),
+    srvGlance,
   );
-  const srvTile = tile("server", "Servers", DATA.servers.length, "all healthy");
-  srvTile.setAttribute("data-adv", ""); tiles.append(srvTile);
 
   // KYZ-103: when live, replace the app-derived counts with Dokploy's
-  // authoritative project.homeStats rollup (counts services + databases,
-  // not just the flattened app list). Tile order: [running, building,
+  // authoritative project.homeStats rollup. Glance order: [live, building,
   // attention, servers]. "Building" stays app-derived (homeStats has no
   // building bucket — only running/error/idle).
   if (window.Dok?.live && window.Dok?.api) {
     window.Dok.api("/api/overview").then(ov => {
       if (!ov || ov.__error || !ov.totals) return;
       const t = ov.totals;
-      const nums = tiles.querySelectorAll(".stat-tile .stat-num");
-      const subs = tiles.querySelectorAll(".stat-tile .stat-sub");
+      const gs = glanceEl.querySelectorAll(".glance");        // the 4 count buttons (separators excluded)
+      const nums = glanceEl.querySelectorAll(".glance .glance-n");
       const srvCount = (ov.servers || []).length || DATA.servers.length;
       if (nums[0]) nums[0].textContent = String(t.running);
-      if (subs[0]) subs[0].textContent = `${t.services} services · ${t.databases} DBs`;
       if (nums[2]) nums[2].textContent = String(t.error);
-      if (subs[2]) subs[2].textContent = t.error === 0 ? "all healthy" : `${t.error} in error`;
       if (nums[3]) nums[3].textContent = String(srvCount);
-      if (subs[3]) subs[3].textContent = `${t.projects} projects`;
+      if (gs[2]) gs[2].classList.toggle("alert", t.error > 0); // red only when something's actually broken
     });
   }
 
