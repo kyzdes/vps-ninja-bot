@@ -746,6 +746,32 @@ window.__DOK_PROBE__ = function () {
 /* ─── expose for per-page scripts ───────────────────────────────────── */
 window.Dok = { $, $$, el, icon, badge, toast, DATA, askClaude, go, openPalette, api, postAction, startLogStream, live: false };
 
+/* Skeleton placeholders shown while bootData() is in flight, tailored to the
+   slot shape: the glance strip keeps its cells, inline chips get a small bar,
+   everything else gets a few shimmer rows. */
+function injectSkeleton(n) {
+  if (n.classList.contains("glance-strip")) {
+    for (let i = 0; i < 4; i++) {
+      n.append(el("div", { class: "glance skel-glance" },
+        el("div", { class: "skel-line", style: { width: "42%", height: "18px" } }),
+        el("div", { class: "skel-line skel-sm", style: { width: "62%", marginTop: "6px" } })));
+      if (i < 3) n.append(el("div", { class: "glance-sep" }));
+    }
+    return;
+  }
+  // Small inline slots (listen address, token chip, version) — one short bar.
+  if (n.tagName === "SPAN" || n.classList.contains("meta-chip") || n.classList.contains("codeblock")) {
+    n.append(el("span", { class: "skel-line", style: { width: "84px", height: "12px", display: "inline-block" } }));
+    return;
+  }
+  // Default: a few shimmer rows for list / card content areas.
+  const wrap = el("div", { class: "skel", "aria-hidden": "true" });
+  for (let i = 0; i < 3; i++) wrap.append(el("div", { class: "skel-row" },
+    el("div", { class: "skel-line", style: { width: (56 - i * 9) + "%" } }),
+    el("div", { class: "skel-line skel-sm", style: { width: "16%", marginLeft: "auto" } })));
+  n.append(wrap);
+}
+
 /* ─── boot: mount shell, fetch live data, then run page hook ────────── */
 document.addEventListener("DOMContentLoaded", async () => {
   const layout = $(".layout");
@@ -764,6 +790,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // data). Empty those slots now so the page hook below rebuilds them
   // interactively instead of duplicating what's already there.
   layout.querySelectorAll("[data-fallback], [data-lead-slot]").forEach(n => { n.innerHTML = ""; });
+  // While bootData() fetches (slow on a cold/loaded server), show a calm
+  // loading state — a slim top progress bar + per-slot skeletons — instead of
+  // blank cards. Both are torn down right before pageInit rebuilds the slots.
+  const bootBar = el("div", { class: "boot-bar", role: "progressbar", "aria-label": "Loading" });
+  document.body.append(bootBar);
+  const skelSlots = Array.from(layout.querySelectorAll("[data-fallback]"));
+  skelSlots.forEach(injectSkeleton);
   // page lead (optional)
   const meta = PAGE_META[page];
   const leadSlot = $("[data-lead-slot]");
@@ -775,6 +808,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Boot live data (replaces MOCK_DATA fields when /api/* is reachable).
   // Per-page scripts read DATA after this, so they get real data when live.
   await bootData();
+  // Tear down the loading state, then let the page hook fill the real content
+  // (list consumers append into now-empty slots, so the skeletons must go).
+  bootBar.remove();
+  skelSlots.forEach(n => { n.innerHTML = ""; });
   if (typeof window.pageInit === "function") window.pageInit({ $, $$, el, icon, badge, toast, DATA, askClaude, go });
 });
 })();

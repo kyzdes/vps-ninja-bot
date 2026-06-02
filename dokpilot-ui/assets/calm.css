@@ -204,8 +204,17 @@
 .card-pad { padding: var(--space-5) var(--space-5) var(--space-6); }
 .stack { gap: var(--space-4); }
 .page-intro { margin-bottom: var(--space-6); }
-/* Meter + form groups inside cards */
+/* Meter + form groups inside cards (raw sibling fields with no gap parent) */
 .field + .field { margin-top: var(--space-4); }
+/* …but when the fields live in a gap container (.stack / .grid / a modal body)
+   that top-margin DOUBLES the spacing and offsets side-by-side grid fields.
+   Zero it there — the container's gap already separates them. */
+.stack .field + .field,
+.grid .field + .field,
+.modal-body .field + .field { margin-top: 0; }
+/* Dialogs are compact, not page-roomy: tighten any card-pad used as a modal
+   sub-panel (e.g. the "Register a key" box) so it doesn't sprawl. */
+.modal .card-pad { padding: var(--space-4); }
 /* Master-detail list items */
 .md-item { padding: 12px 14px; }
 .md-list { gap: 4px; }
