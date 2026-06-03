@@ -3,7 +3,10 @@
 #
 # Usage:
 #   secret-store.sh get <account>            Print secret to stdout (exit 1 if missing)
-#   secret-store.sh set <account> <value>    Store or update secret
+#   secret-store.sh set <account> [<value>]  Store or update secret. If <value> is
+#                                            omitted, the secret is read from STDIN —
+#                                            prefer this so the value never appears in
+#                                            argv / `ps` / shell history.
 #   secret-store.sh delete <account>         Remove secret
 #   secret-store.sh list                     List accounts for service=dokpilot
 #   secret-store.sh available                Exit 0 if Keychain is usable here, 1 otherwise
@@ -57,7 +60,14 @@ case "$ACTION" in
   set)
     _require_macos
     ACCOUNT="${2:?Missing account}"
-    VALUE="${3:?Missing value}"
+    # Value from $3, or from STDIN when $3 is omitted. Stdin keeps the secret out
+    # of this process's argv (it still reaches `security` via -w, an OS-tool limit).
+    if [ "$#" -ge 3 ]; then
+      VALUE="$3"
+    else
+      VALUE="$(cat)"
+    fi
+    [ -n "$VALUE" ] || { echo '{"error": "empty value"}' >&2; exit 1; }
     COMMENT="Created by dokpilot skill on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if ! security add-generic-password -U -s "$SERVICE" -a "$ACCOUNT" -w "$VALUE" -j "$COMMENT" 2>/dev/null; then
       echo "{\"error\": \"Failed to write secret to Keychain: $ACCOUNT\"}" >&2

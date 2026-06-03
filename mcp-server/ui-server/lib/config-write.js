@@ -15,7 +15,7 @@
 const fs   = require("node:fs");
 const path = require("node:path");
 const os   = require("node:os");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { CONFIG_PATH, SCRIPTS_DIR } = require("./exec");
 
 function readRaw() {
@@ -47,17 +47,34 @@ async function keychainAvailable() {
   return r.ok;
 }
 
-/** Store a Dokploy API key. Returns the reference to write into JSON:
- *  { _secret: "<account>" } on Keychain success, else the raw string
- *  (plaintext fallback for non-macOS). */
+/** Write a secret to the Keychain with the VALUE passed via STDIN, so it never
+ *  appears in this process's argv / `ps`. Returns { ok, code, stderr }. */
+function secretStoreSet(account, value) {
+  return new Promise((resolve) => {
+    const child = spawn("bash", [path.join(SCRIPTS_DIR, "secret-store.sh"), "set", account], { timeout: 8000 });
+    let stderr = "";
+    child.stderr.on("data", (d) => { stderr += d; });
+    child.on("error", (e) => resolve({ ok: false, code: 1, stderr: String(e.message) }));
+    child.on("close", (code) => resolve({ ok: code === 0, code: code ?? 1, stderr: stderr.slice(0, 200) }));
+    try { child.stdin.write(value); child.stdin.end(); } catch { /* 'error' event resolves it */ }
+  });
+}
+
+/** Store a Dokploy API key. Returns the JSON reference on success.
+ *  Policy: NEVER persist a secret in plaintext when a Keychain is available.
+ *   - Keychain present + write ok   → { ref: {_secret}, source:"keychain" }
+ *   - Keychain present + write fail  → { error } — caller MUST abort (no plaintext)
+ *   - Keychain absent (non-macOS)    → { ref: value, source:"file", warning } — the
+ *     only platform without an OS secret store; surfaced loudly. */
 async function storeApiKey(serverName, value) {
   const account = `${serverName}:dokploy_api_key`;
   if (await keychainAvailable()) {
-    const r = await secretStore(["set", account, value]);
+    const r = await secretStoreSet(account, value);
     if (r.ok) return { ref: { _secret: account }, source: "keychain" };
-    return { ref: value, source: "file", warning: "Keychain write failed; stored in file: " + r.stderr.slice(0, 200) };
+    return { error: "keychain-write-failed", detail: r.stderr };
   }
-  return { ref: value, source: "file", warning: "Keychain unavailable on this platform; stored in file." };
+  return { ref: value, source: "file",
+    warning: "No OS Keychain on this platform — refusing to silently persist the API key in plaintext is not possible here; configure on macOS (Keychain) or via keys-keeper instead." };
 }
 
 async function deleteApiKey(serverName) {

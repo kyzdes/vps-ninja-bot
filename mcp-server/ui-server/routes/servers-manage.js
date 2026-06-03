@@ -112,6 +112,12 @@ async function upsertServer(req, res, ctx) {
   let secretSource = (existing.dokploy_api_key && existing.dokploy_api_key._secret) ? "keychain" : (existing.dokploy_api_key ? "file" : null);
   if (dokploy_api_key) {
     const stored = await storeApiKey(name, dokploy_api_key);
+    // Refuse to persist a server with a plaintext API key: if the Keychain write
+    // failed, abort the whole upsert (nothing is written to servers.json).
+    if (stored.error) {
+      return json(res, 502, { error: "secret-store-failed", detail: stored.detail || stored.error,
+        note: "Server not saved — won't persist the API key in plaintext. Check Keychain access and retry." });
+    }
     apiKeyRef = stored.ref;
     secretSource = stored.source;
     if (stored.warning) warnings.push(stored.warning);
