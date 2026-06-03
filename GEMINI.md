@@ -128,9 +128,6 @@ This skill includes comprehensive Dokploy API reference and guides in `reference
 6. `references/troubleshooting.md` — SSL, DNS, build errors, common issues
 7. `references/manual-docker-deploy.md` — Fallback deploy without GitHub integration
 
-> **Note:** The `mcp-server/docs/` directory may contain outdated API references from v3.
-> Always prefer the `references/` directory above for up-to-date documentation.
-
 **If the built-in docs don't cover something** (e.g., a brand-new Dokploy feature), use the Dokploy MCP server if available, or Context7:
 ```
 Tool: mcp__plugin_context7_context7__query-docs
