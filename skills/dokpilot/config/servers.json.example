@@ -1,13 +1,32 @@
 {
+  "_mode_help": "Topology mode — one of: single | independent | cluster. See references/topology-modes.md. 'single' = one server. 'independent' = several servers, each its own Dokploy panel (own dokploy_url+key per servers entry). 'cluster' = one panel managing multiple nodes via serverId (use the 'nodes' map below).",
+  "mode": "single",
   "servers": {
     "main": {
       "host": "45.55.67.89",
       "ssh_user": "root",
       "ssh_key": "",
-      "dokploy_url": "http://45.55.67.89:3000",
+      "dokploy_url": "https://dokploy.example.com",
       "dokploy_api_key": "dk_your_api_key_here",
       "github_provider_id": "",
-      "added_at": "2026-02-17T12:00:00Z"
+      "added_at": "2026-02-17T12:00:00Z",
+
+      "_comment_nodes": "Optional. If this panel manages extra nodes (Dokploy remote servers under one control plane), list them here. Placement policy: references/server-placement.md. Target a node by setting serverId in API bodies (null = this panel host).",
+      "nodes": {
+        "A": {
+          "ip": "45.55.67.89",
+          "server_id": null,
+          "role": "control-plane (panel) + light web apps",
+          "note": "panel host; keep RAM headroom for the control plane"
+        },
+        "B": {
+          "ip": "45.55.67.90",
+          "server_id": "<remote-serverId from: dokploy-api.sh main GET server.all>",
+          "role": "heavy compute / offload node",
+          "note": "remote deploy node added under the same panel"
+        }
+      },
+      "placement_policy": "references/server-placement.md"
     }
   },
   "cloudflare": {
