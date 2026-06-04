@@ -136,7 +136,10 @@ function makeAppAction(action) {
     if (!ep) return json(res, 400, { error: "unknown-action-or-kind", action, kind });
 
     const idField = kind === "application" ? "applicationId" : "composeId";
-    const r = await dokploy(server, "POST", ep, { [idField]: params.id });
+    // delete is destructive: the script refuses it without DOKPILOT_CONFIRM_DESTROY.
+    // The dashboard's Remove action is already user-confirmed in the UI, so set it.
+    const opts = action === "delete" ? { env: { DOKPILOT_CONFIRM_DESTROY: "1" } } : {};
+    const r = await dokploy(server, "POST", ep, { [idField]: params.id }, opts);
     if (r.__error) return json(res, 502, { error: "dokploy-failed", ...r });
     json(res, 200, { action, app_id: params.id, kind, server, response: r });
   };
@@ -236,7 +239,10 @@ async function deleteProject(req, res, ctx, params) {
   let body; try { body = await readBody(req); } catch (e) { return json(res, e.code || 400, { error: e.message }); }
   const server = body?.server || req.query?.server;
   if (!server) return json(res, 400, { error: "missing-server" });
-  const r = await dokploy(server, "POST", "project.remove", { projectId: params.id });
+  // project.remove is the highest-blast-radius delete; the script refuses it
+  // without DOKPILOT_CONFIRM_DESTROY. This route is reached only via the UI's
+  // strong-confirm Remove, so authorize it here.
+  const r = await dokploy(server, "POST", "project.remove", { projectId: params.id }, { env: { DOKPILOT_CONFIRM_DESTROY: "1" } });
   if (r.__error) return json(res, 502, { error: "dokploy-failed", ...r });
   json(res, 200, { deleted: params.id, server });
 }

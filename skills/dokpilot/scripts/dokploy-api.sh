@@ -35,6 +35,21 @@ METHOD="${2:?Missing HTTP method}"
 ENDPOINT="${3:?Missing API endpoint}"
 BODY="${4:-}"
 
+# ── Destroy safety gate (defense-in-depth) ─────────────────────────────────
+# The highest-blast-radius deletions (a whole project, or an app/compose) are
+# REFUSED unless the caller explicitly sets DOKPILOT_CONFIRM_DESTROY=1. The skill
+# sets it ONLY after the user types the resource name back (SKILL.md → DESTROY
+# SAFETY GATE); the dashboard sets it after its own typed-confirm UI. This stops
+# a model-invoked skill from nuking a project without explicit human intent.
+case "$ENDPOINT" in
+  project.remove|application.delete|compose.delete)
+    if [ "${DOKPILOT_CONFIRM_DESTROY:-}" != "1" ]; then
+      echo "{\"error\": \"destroy-blocked\", \"endpoint\": \"$ENDPOINT\", \"hint\": \"Refusing an irreversible delete. Confirm intent with the user (have them type the exact resource name), THEN set DOKPILOT_CONFIRM_DESTROY=1 for this one call. See SKILL.md DESTROY SAFETY GATE.\"}" >&2
+      exit 3
+    fi
+    ;;
+esac
+
 # Determine script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG="$SCRIPT_DIR/../config/servers.json"

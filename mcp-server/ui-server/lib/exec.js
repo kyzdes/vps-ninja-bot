@@ -54,11 +54,14 @@ function runScript(name, args, opts = {}) {
 }
 
 /* ─── dokploy-api.sh ────────────────────────────────────────────── */
-/** Calls Dokploy tRPC. Returns parsed JSON or { error } on failure. */
-async function dokploy(server, method, endpoint, body) {
+/** Calls Dokploy tRPC. Returns parsed JSON or { error } on failure.
+ *  `opts` is passed to runScript — e.g. { env: { DOKPILOT_CONFIRM_DESTROY: "1" } }
+ *  for the dashboard's already-confirmed destructive deletes (the script refuses
+ *  project.remove / application.delete / compose.delete without it). */
+async function dokploy(server, method, endpoint, body, opts = {}) {
   const args = [server, method, endpoint];
   if (body != null) args.push(typeof body === "string" ? body : JSON.stringify(body));
-  const { stdout, stderr, code, timedOut } = await runScript("dokploy-api.sh", args);
+  const { stdout, stderr, code, timedOut } = await runScript("dokploy-api.sh", args, opts);
   if (code !== 0) {
     return { __error: true, code, stderr: stderr.slice(0, 800), timedOut };
   }
