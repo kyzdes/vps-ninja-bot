@@ -175,7 +175,6 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
     const kind = l.kind === "err" ? "error" : l.kind;
     const row = el("div", { class:"log-line log-kind-" + l.kind + ((kind==="error")?" error-line":""), "data-kind":kind },
       el("span", { class:"log-t" }, l.t || ""), el("span", { class:"log-text" }, l.text));
-    if (kind === "error") row.append(el("button", { class:"ask-claude sm", "data-claude":"explain-error", style:{marginLeft:"auto"} }, icon("spark",11), "Explain"));
     return row;
   }
 

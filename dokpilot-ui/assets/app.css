@@ -382,24 +382,7 @@ a.lrow:hover .chev { color: var(--accent); }
 .step-active .step-label { color: var(--fg); font-weight: 500; }
 .step-error .step-num { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
 
-/* ─── inline Claude affordance + popover ────────────────────────────── */
-.ask-claude { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--radius-md);
-  border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent);
-  font-size: var(--text-base); font-weight: 500; transition: all var(--motion-fast); }
-.ask-claude:hover { background: color-mix(in oklab, var(--accent), transparent 80%); box-shadow: 0 0 12px var(--accent-glow); }
-.ask-claude .icon { width: 13px; height: 13px; }
-.ask-claude.sm { height: 24px; padding: 0 8px; font-size: var(--text-sm); }
-
-.claude-pop { position: fixed; z-index: 80; width: 340px; background: var(--surface-2); border: 1px solid var(--accent-line);
-  border-radius: var(--radius-lg); box-shadow: var(--elev-raised), 0 0 0 1px var(--accent-soft); overflow: hidden; }
-.claude-pop-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border-soft); }
-.claude-spark { width: 20px; height: 20px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
-.claude-pop-head .who { font-family: var(--font-mono); font-size: var(--text-base); font-weight: 600; }
-.claude-pop-head .tiny { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); margin-left: auto; }
-.claude-pop-body { padding: 14px; font-size: var(--text-lg); line-height: 1.55; color: var(--fg-2); max-height: 260px; overflow: auto; }
-.claude-pop-body strong { color: var(--fg); font-weight: 600; }
-.claude-pop-body code { font-family: var(--font-mono); font-size: var(--text-base); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px 5px; color: var(--accent); }
-.claude-pop-foot { display: flex; gap: 8px; padding: 11px 14px; border-top: 1px solid var(--border-soft); background: var(--bg-elevated); }
+/* ─── typing caret (assistant) ──────────────────────────────────────── */
 .typing::after { content: "▮"; color: var(--accent); animation: pulse 1.1s steps(1) infinite; margin-left: 1px; }
 
 /* ─── modal / overlay ───────────────────────────────────────────────── */

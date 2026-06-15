@@ -166,9 +166,6 @@
 .btn-ghost:hover { background: var(--surface-hover); }
 .btn-danger { color: var(--fg-2); border-color: var(--border); }
 .btn-danger:hover { color: var(--danger); background: var(--surface-hover); border-color: var(--border-strong); }
-.ask-claude { background: var(--surface); border-color: var(--border); color: var(--fg-2); height: 30px; }
-.ask-claude:hover { background: var(--surface-hover); box-shadow: none; }
-.ask-claude .icon { color: var(--muted); }
 
 /* Numbers are facts, not colour — drop the accent stat number */
 .stat-tile.accent .stat-num { color: var(--fg); }

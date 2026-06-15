@@ -328,68 +328,6 @@ function openPalette() {
 function closePalette(){ $(".cmdk-overlay")?.remove(); }
 const go = (href) => { location.href = href; };
 
-/* ─── inline Claude popovers ────────────────────────────────────────── */
-const CLAUDE_CTX = {
-  "fix-deploy": { title:"Diagnose · metrics-collector",
-    text:"I read the last build. The container exits because <code>prometheus.yml</code> has a scrape block with no <strong>job_name</strong> — Prometheus refuses to start without it.<br><br>Fix: add <code>job_name: 'self'</code> to the first scrape_config, commit, and redeploy. Want me to open a PR on <strong>kyzdes/metrics-collector</strong> and redeploy once it merges?",
-    action:"Open fix PR + redeploy" },
-  "explain-error": { title:"Explain this error",
-    text:"This is a <strong>build-time</strong> failure, not a runtime crash — the deploy never produced an image. The root cause is upstream config, so retrying as-is will fail identically. I can patch the config and re-run.",
-    action:"Patch & retry" },
-  "fill-env": { title:"Suggest env values",
-    text:"Based on the detected Next.js app and your other projects, I'd set:<br><code>NEXT_PUBLIC_API_URL=https://api.notes.kyzdes.dev</code><br><code>NODE_ENV=production</code><br>and provision a <strong>Postgres 16</strong> instance for <code>DATABASE_URL</code>. Apply these?",
-    action:"Apply suggestions" },
-  "dns-help": { title:"DNS · dokpilot.dev",
-    text:"SSL is still <strong>issuing</strong> — Let's Encrypt is waiting for the <code>A</code> record to propagate through Cloudflare. This usually clears in 2–5 min. The record looks correct (<code>A → 77.90.43.8</code>, proxied). No action needed; I'll alert you if it stalls past 10 min.",
-    action:"Re-check now" },
-  default: { title:"Ask Claude",
-    text:"I can explain anything on this screen, suggest a fix, or run a deploy step for you. What would you like to do?",
-    action:"Open console" },
-};
-let openPop = null;
-function askClaude(anchor, key) {
-  if (openPop) { openPop.remove(); openPop = null; }
-  const ctx = CLAUDE_CTX[key] || CLAUDE_CTX.default;
-  const body = el("div", { class:"claude-pop-body" }, el("span", { class:"typing" }));
-  const pop = el("div", { class:"claude-pop" },
-    el("div", { class:"claude-pop-head" },
-      el("span", { class:"claude-spark" }, icon("spark", 13)),
-      el("span", { class:"who" }, ctx.title),
-      el("span", { class:"tiny" }, "opus 4.7 · local"),
-    ),
-    body,
-    el("div", { class:"claude-pop-foot" },
-      el("button", { class:"btn btn-primary btn-sm grow", onclick:()=>{ pop.remove(); openPop=null; toast("Claude is on it — watch the log", "spark"); } }, ctx.action),
-      el("button", { class:"btn btn-ghost btn-sm", onclick:()=>{ pop.remove(); openPop=null; } }, "Dismiss"),
-    ),
-  );
-  document.body.append(pop);
-  openPop = pop;
-  // position near anchor
-  const r = anchor.getBoundingClientRect();
-  const top = Math.min(r.bottom + 8, window.innerHeight - pop.offsetHeight - 12);
-  const left = Math.min(Math.max(12, r.left), window.innerWidth - pop.offsetWidth - 12);
-  pop.style.top = top + "px"; pop.style.left = left + "px";
-  typeInto(body, ctx.text, 11);
-}
-function typeInto(node, html, speed = 12) {
-  node.innerHTML = ""; node.classList.add("typing");
-  const tokens = html.split(/(<[^>]+>|\s)/).filter(Boolean);
-  let i = 0;
-  const tick = () => {
-    if (i >= tokens.length) { node.classList.remove("typing"); return; }
-    node.innerHTML += tokens[i++];
-    node.scrollTop = node.scrollHeight;
-    setTimeout(tick, /<[^>]+>/.test(tokens[i-1]) ? 0 : speed + Math.random()*40);
-  };
-  tick();
-}
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-claude]");
-  if (btn) { e.preventDefault(); askClaude(btn, btn.dataset.claude); return; }
-  if (openPop && !e.target.closest(".claude-pop")) { openPop.remove(); openPop = null; }
-});
-
 /* ─── toast ─────────────────────────────────────────────────────────── */
 let toastWrap;
 function toast(msg, ic = "check", err = false) {
@@ -723,7 +661,7 @@ window.__DOK_PROBE__ = function () {
   const labels = $$("button, .btn, a.nav-item", content)
     .map(b => (b.getAttribute("aria-label") || b.textContent || "").trim().replace(/\s+/g, " "))
     .filter(Boolean);
-  const overlay = document.querySelector(".overlay, .cmdk-overlay, .modal, .claude-pop");
+  const overlay = document.querySelector(".overlay, .cmdk-overlay, .modal");
   return {
     page: layout?.dataset?.page || null,
     live: !!(window.Dok && window.Dok.live),
@@ -744,7 +682,7 @@ window.__DOK_PROBE__ = function () {
 };
 
 /* ─── expose for per-page scripts ───────────────────────────────────── */
-window.Dok = { $, $$, el, icon, badge, toast, DATA, askClaude, go, openPalette, api, postAction, startLogStream, live: false };
+window.Dok = { $, $$, el, icon, badge, toast, DATA, go, openPalette, api, postAction, startLogStream, live: false };
 
 /* Skeleton placeholders shown while bootData() is in flight, tailored to the
    slot shape: the glance strip keeps its cells, inline chips get a small bar,
@@ -812,6 +750,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // (list consumers append into now-empty slots, so the skeletons must go).
   bootBar.remove();
   skelSlots.forEach(n => { n.innerHTML = ""; });
-  if (typeof window.pageInit === "function") window.pageInit({ $, $$, el, icon, badge, toast, DATA, askClaude, go });
+  if (typeof window.pageInit === "function") window.pageInit({ $, $$, el, icon, badge, toast, DATA, go });
 });
 })();
