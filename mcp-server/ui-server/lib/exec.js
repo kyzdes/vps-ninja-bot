@@ -12,6 +12,7 @@
 const { execFile } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
+const destroyNonce = require("./destroy-nonce");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const SCRIPTS_DIR = path.join(REPO_ROOT, "skills", "dokpilot", "scripts");
@@ -74,6 +75,59 @@ async function dokploy(server, method, endpoint, body, opts = {}) {
   } catch (e) {
     return { __error: true, code: 4, message: "non-json response", raw: stdout.slice(0, 200) };
   }
+}
+
+/* ─── dokployDestroy: authorized irreversible delete ─────────────────
+ * The ONLY sanctioned path to a destroy endpoint from the dashboard.
+ *
+ * Instead of setting the bare DOKPILOT_CONFIRM_DESTROY=1 env flag (which a
+ * prompt-injected worker could in principle set on its own children), we:
+ *   1. MINT a server-side, single-use, HMAC-signed nonce keyed on the
+ *      per-launch bearer TOKEN (which is NEVER in any worker's env).
+ *   2. Spawn dokploy-api.sh threading, FOR THIS ONE CALL ONLY:
+ *        DOKPILOT_DESTROY_NONCE  — the minted nonce
+ *        UI_VERIFY_URL           — http://127.0.0.1:<port>/api/destroy/verify
+ *        UI_TOKEN                — the bearer for the verify callback
+ *   3. The script curls UI_VERIFY_URL (bearer+CSRF) and proceeds only if the
+ *      nonce verifies + is consumed. Fails closed otherwise.
+ *
+ * KEY INVARIANT: UI_TOKEN is threaded ONLY here, ONLY for a human/UI-confirmed
+ * delete. The deploy/analyze worker spawns with `env: process.env` (no token),
+ * so it can neither mint a nonce nor call the verify endpoint.
+ *
+ *   dokployDestroy(server, endpoint, body, { resourceId, port, token })
+ *     → same return shape as dokploy()
+ */
+async function dokployDestroy(server, endpoint, body, { resourceId, port, token } = {}) {
+  if (!token) {
+    return { __error: true, code: 3, message: "dokployDestroy: missing ui-server token (cannot mint nonce)" };
+  }
+  if (!port) {
+    return { __error: true, code: 3, message: "dokployDestroy: missing ui-server port (cannot build verify URL)" };
+  }
+  // resourceId binds the nonce to a single target. Default to whatever id the
+  // body carries so the script's body-derived id matches the minted target.
+  const rid = resourceId != null
+    ? String(resourceId)
+    : String(
+        (body && (body.applicationId || body.composeId || body.projectId ||
+                  body.postgresId || body.mysqlId || body.mariadbId ||
+                  body.mongoId || body.redisId || body.libsqlId)) || ""
+      );
+
+  let nonce;
+  try {
+    nonce = destroyNonce.mint({ endpoint, resourceId: rid, server, token });
+  } catch (e) {
+    return { __error: true, code: 3, message: "dokployDestroy: nonce mint failed: " + (e?.message || e) };
+  }
+
+  const env = {
+    DOKPILOT_DESTROY_NONCE: nonce,
+    UI_VERIFY_URL: `http://127.0.0.1:${port}/api/destroy/verify`,
+    UI_TOKEN: token,
+  };
+  return dokploy(server, "POST", endpoint, body, { env });
 }
 
 /** Like dokploy() but returns the RAW response text without JSON-parsing.
@@ -272,6 +326,7 @@ module.exports = {
   run,
   runScript,
   dokploy,
+  dokployDestroy,
   dokployRaw,
   cloudflareList,
   cloudflareCreate,

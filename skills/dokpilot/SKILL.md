@@ -434,12 +434,30 @@ Delete database (after confirmation).
 > own message clearly and unambiguously asked to destroy *that specific*
 > resource. Any doubt → stop and ask first.
 >
-> **Technical backstop:** `dokploy-api.sh` REFUSES `project.remove`,
-> `application.delete`, and `compose.delete` unless the env
-> `DOKPILOT_CONFIRM_DESTROY=1` is set for that call. Set it **only** on the
-> individual delete commands, and **only after** the typed-name confirmation
-> above — e.g. `DOKPILOT_CONFIRM_DESTROY=1 bash scripts/dokploy-api.sh <server>
-> POST application.delete '{"applicationId":"…"}'`. Never export it globally.
+> **Technical backstop:** `dokploy-api.sh` REFUSES every irreversible delete —
+> `project.remove`, `application.delete`, `compose.delete`, AND the database
+> drops `postgres.remove` / `mysql.remove` / `mariadb.remove` / `mongo.remove` /
+> `redis.remove` / `libsql.remove` (these destroy user DATA) — unless the call is
+> authorized. There are two authorization paths, and the script picks based on
+> whether `UI_VERIFY_URL` is set:
+>
+> - **CLI path (you, the skill, in a terminal):** `UI_VERIFY_URL` is NOT set, so
+>   the script proceeds only if `DOKPILOT_CONFIRM_DESTROY=1` is set for **that
+>   one call** — set it **only after** the typed-name confirmation above, e.g.
+>   `DOKPILOT_CONFIRM_DESTROY=1 bash scripts/dokploy-api.sh <server> POST
+>   application.delete '{"applicationId":"…"}'`. **Never export it globally** or
+>   as a default in a shared profile.
+> - **UI path (the dashboard Remove button):** the ui-server mints a
+>   **server-minted, single-use, HMAC-signed nonce** (keyed on the per-launch
+>   bearer token) and threads `DOKPILOT_DESTROY_NONCE` + `UI_VERIFY_URL` +
+>   `UI_TOKEN` into the script **for that one call** (`exec.dokployDestroy()`).
+>   The script then calls back to `POST /api/destroy/verify` and proceeds only if
+>   the nonce verifies and is consumed. It **fails closed** on any network error
+>   or a non-`ok` response. The deploy/analyze worker is spawned **without** the
+>   ui-server bearer token in its env, so a prompt-injected worker can neither
+>   mint a nonce nor call the verify endpoint — it is structurally locked out of
+>   authorizing a destroy. **Never thread the ui-server token into any worker
+>   env.**
 
 **Syntax:** `destroy <project-name> [--keep-db] [--keep-dns] [--server <name>]`
 

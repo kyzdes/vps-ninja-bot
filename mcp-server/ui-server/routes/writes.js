@@ -2,7 +2,7 @@
 const { json } = require("../lib/http");
 const csrf = require("../lib/csrf");
 const {
-  dokploy, cloudflareCreate, readConfig, listServerNames,
+  dokploy, dokployDestroy, cloudflareCreate, readConfig, listServerNames,
 } = require("../lib/exec");
 
 /** Read JSON body with a 64KB cap. */
@@ -136,10 +136,17 @@ function makeAppAction(action) {
     if (!ep) return json(res, 400, { error: "unknown-action-or-kind", action, kind });
 
     const idField = kind === "application" ? "applicationId" : "composeId";
-    // delete is destructive: the script refuses it without DOKPILOT_CONFIRM_DESTROY.
-    // The dashboard's Remove action is already user-confirmed in the UI, so set it.
-    const opts = action === "delete" ? { env: { DOKPILOT_CONFIRM_DESTROY: "1" } } : {};
-    const r = await dokploy(server, "POST", ep, { [idField]: params.id }, opts);
+    const payload = { [idField]: params.id };
+    // delete is destructive: the script refuses it without authorization.
+    // The dashboard's Remove action is already user-confirmed in the UI, so we
+    // MINT a server-side single-use nonce (keyed on the ui-server token, which
+    // no worker can see) and let the script verify it via the local callback.
+    let r;
+    if (action === "delete") {
+      r = await dokployDestroy(server, ep, payload, { resourceId: params.id, port: ctx.port, token: ctx.token });
+    } else {
+      r = await dokploy(server, "POST", ep, payload);
+    }
     if (r.__error) return json(res, 502, { error: "dokploy-failed", ...r });
     json(res, 200, { action, app_id: params.id, kind, server, response: r });
   };
@@ -240,9 +247,12 @@ async function deleteProject(req, res, ctx, params) {
   const server = body?.server || req.query?.server;
   if (!server) return json(res, 400, { error: "missing-server" });
   // project.remove is the highest-blast-radius delete; the script refuses it
-  // without DOKPILOT_CONFIRM_DESTROY. This route is reached only via the UI's
-  // strong-confirm Remove, so authorize it here.
-  const r = await dokploy(server, "POST", "project.remove", { projectId: params.id }, { env: { DOKPILOT_CONFIRM_DESTROY: "1" } });
+  // without authorization. This route is reached only via the UI's strong-confirm
+  // Remove, so we mint a server-side single-use nonce (keyed on the ui-server
+  // token) and let the script verify it via the local callback. The deploy
+  // worker — which never has the token — cannot mint or verify, so it cannot
+  // reach a destroy even if prompt-injected.
+  const r = await dokployDestroy(server, "project.remove", { projectId: params.id }, { resourceId: params.id, port: ctx.port, token: ctx.token });
   if (r.__error) return json(res, 502, { error: "dokploy-failed", ...r });
   json(res, 200, { deleted: params.id, server });
 }

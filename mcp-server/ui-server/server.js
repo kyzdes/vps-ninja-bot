@@ -83,6 +83,7 @@ const router = buildRouter([
   require("./routes/queue"),
   require("./routes/jobs"),
   require("./routes/writes"),
+  require("./routes/destroy"),
   require("./routes/assistant"),
   require("./routes/servers-manage"),
 ]);

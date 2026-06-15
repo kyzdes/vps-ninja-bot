@@ -36,16 +36,62 @@ ENDPOINT="${3:?Missing API endpoint}"
 BODY="${4:-}"
 
 # ── Destroy safety gate (defense-in-depth) ─────────────────────────────────
-# The highest-blast-radius deletions (a whole project, or an app/compose) are
-# REFUSED unless the caller explicitly sets DOKPILOT_CONFIRM_DESTROY=1. The skill
-# sets it ONLY after the user types the resource name back (SKILL.md → DESTROY
-# SAFETY GATE); the dashboard sets it after its own typed-confirm UI. This stops
-# a model-invoked skill from nuking a project without explicit human intent.
+# The highest-blast-radius deletions (a whole project, an app/compose, or a
+# database — which drops user DATA) are REFUSED unless the caller proves intent.
+#
+# Two authorization paths (D-018):
+#   1. UI path  — UI_VERIFY_URL is set. The dashboard mints a server-side,
+#      single-use, HMAC-signed nonce that the deploy/analyze worker structurally
+#      cannot forge (it never has the ui-server bearer token). We curl that local
+#      verify endpoint and proceed ONLY if it returns {"ok":true}. FAIL CLOSED on
+#      any network/curl error or non-ok response.
+#   2. CLI path — UI_VERIFY_URL is NOT set (direct human skill-CLI use). We fall
+#      back to the typed-name human gate: proceed only if DOKPILOT_CONFIRM_DESTROY=1
+#      is set for THIS one call (SKILL.md → DESTROY SAFETY GATE). Never exported
+#      globally / as a default.
+#
+# This stops a model-invoked skill from nuking a project or a database without
+# explicit human intent.
 case "$ENDPOINT" in
-  project.remove|application.delete|compose.delete)
-    if [ "${DOKPILOT_CONFIRM_DESTROY:-}" != "1" ]; then
-      echo "{\"error\": \"destroy-blocked\", \"endpoint\": \"$ENDPOINT\", \"hint\": \"Refusing an irreversible delete. Confirm intent with the user (have them type the exact resource name), THEN set DOKPILOT_CONFIRM_DESTROY=1 for this one call. See SKILL.md DESTROY SAFETY GATE.\"}" >&2
-      exit 3
+  project.remove|application.delete|compose.delete|postgres.remove|mysql.remove|mariadb.remove|mongo.remove|redis.remove|libsql.remove)
+    if [ -n "${UI_VERIFY_URL:-}" ]; then
+      # ── UI path: validate the server-minted nonce via the local callback ──
+      # Identify the target resourceId from the request body so the verify
+      # endpoint can confirm the nonce was minted for THIS exact target.
+      _RESOURCE_ID=""
+      if [ -n "$BODY" ]; then
+        _RESOURCE_ID=$(printf '%s' "$BODY" | jq -r '.applicationId // .composeId // .projectId // .postgresId // .mysqlId // .mariadbId // .mongoId // .redisId // .libsqlId // empty' 2>/dev/null)
+      fi
+      if [ -z "${DOKPILOT_DESTROY_NONCE:-}" ] || [ -z "${UI_TOKEN:-}" ]; then
+        echo "{\"error\": \"destroy-blocked\", \"endpoint\": \"$ENDPOINT\", \"hint\": \"UI_VERIFY_URL set but DOKPILOT_DESTROY_NONCE / UI_TOKEN missing. Mint a nonce via exec.dokployDestroy(). Fail closed.\"}" >&2
+        exit 3
+      fi
+      _VERIFY_BODY=$(jq -nc \
+        --arg endpoint "$ENDPOINT" \
+        --arg resourceId "$_RESOURCE_ID" \
+        --arg server "$SERVER" \
+        --arg nonce "$DOKPILOT_DESTROY_NONCE" \
+        '{endpoint:$endpoint, resourceId:$resourceId, server:$server, nonce:$nonce}')
+      _VERIFY_RESP=$(curl -s -S --max-time 10 \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $UI_TOKEN" \
+        -H "X-CSRF: $UI_TOKEN" \
+        -d "$_VERIFY_BODY" \
+        "$UI_VERIFY_URL" 2>/dev/null) || {
+          echo "{\"error\": \"destroy-blocked\", \"endpoint\": \"$ENDPOINT\", \"hint\": \"Destroy verify callback failed (network/curl error). Fail closed.\"}" >&2
+          exit 3
+        }
+      if [ "$(printf '%s' "$_VERIFY_RESP" | jq -r '.ok // false' 2>/dev/null)" != "true" ]; then
+        echo "{\"error\": \"destroy-blocked\", \"endpoint\": \"$ENDPOINT\", \"hint\": \"Destroy nonce rejected by verify endpoint. Fail closed.\"}" >&2
+        exit 3
+      fi
+    else
+      # ── CLI path: typed-name human gate (env flag, per-call only) ──
+      if [ "${DOKPILOT_CONFIRM_DESTROY:-}" != "1" ]; then
+        echo "{\"error\": \"destroy-blocked\", \"endpoint\": \"$ENDPOINT\", \"hint\": \"Refusing an irreversible delete. Confirm intent with the user (have them type the exact resource name), THEN set DOKPILOT_CONFIRM_DESTROY=1 for this one call. See SKILL.md DESTROY SAFETY GATE.\"}" >&2
+        exit 3
+      fi
     fi
     ;;
 esac
