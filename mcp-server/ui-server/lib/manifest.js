@@ -39,7 +39,12 @@ const MAX_STR = 200;       // generic string cap
 const MAX_NOTES = 500;     // notes cap
 const MAX_ARRAY = 32;      // array element cap
 const ENV_KEY_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
-// Shell metacharacters / multi-command markers that make a command "freeform".
+// ADVISORY flag (not a security boundary): commands are only FLAGGED for human
+// review, never rejected or auto-run. This heuristic catches shell metacharacters
+// + common exfil binaries but is deliberately not exhaustive (e.g. it won't match
+// `bash -c ...` or a plain `rm -rf`). The real containment is: Phase B never
+// auto-executes a flagged command (worker-guard.js) and builds run in Dokploy's
+// own container gated by the mandatory plan-then-confirm review.
 const METACHAR_RE = /[;&|`$(){}<>\n\r]|\$\(|&&|\|\||>>|\bcurl\b|\bwget\b|\bsh\b\s|\beval\b/;
 
 function isPlainObject(v) {

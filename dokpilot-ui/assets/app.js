@@ -1,8 +1,8 @@
 /* Dokpilot UI — shared shell engine.
    Each screen ships <div class="layout" data-page="X"> + a hand-written <main>.
    This file injects the persistent sidebar + topbar, runs the Simple/Advanced
-   mode, the ⌘K command palette, the inline-Claude popovers, and per-page
-   interactions. Prototype only — no real network calls; data is mocked.
+   mode, the ⌘K command palette, and per-page interactions.
+   Prototype only — no real network calls; data is mocked.
 */
 (() => {
 "use strict";
@@ -349,7 +349,7 @@ document.addEventListener("click", (e) => {
 /* ─── keyboard ──────────────────────────────────────────────────────── */
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $(".cmdk-overlay") ? closePalette() : openPalette(); }
-  if (e.key === "Escape") { closePalette(); $(".overlay")?.remove(); if (openPop){ openPop.remove(); openPop=null; } }
+  if (e.key === "Escape") { closePalette(); $(".overlay")?.remove(); }
 });
 
 /* ─── API client + adapter ──────────────────────────────────────────── */
