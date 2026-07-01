@@ -499,6 +499,20 @@ function synthActivity(apiApps) {
      `dokpilot:data-updated` event so the active page can rerender
      just the affected widgets without a full reload.
 */
+/* WS10/T35: a persistent amber banner when the deploy CLI (`claude`) isn't usable.
+   Deploys still fail cleanly server-side; this just warns the user up front. */
+function showClaudeBanner(claude) {
+  if (document.getElementById("claude-offline")) return;
+  const b = el("div", { id:"claude-offline", role:"alert", style:{
+      position:"fixed", top:"0", left:"0", right:"0", zIndex:"95", margin:"0",
+      padding:"8px 16px", textAlign:"center", fontSize:"var(--text-sm)",
+      color:"var(--fg)", background:"var(--warning-soft, var(--surface-2))",
+      borderBottom:"1px solid var(--warning, var(--border))" } },
+    icon("warn", 14), " ",
+    (claude && claude.hint) || "The `claude` CLI isn't ready — deploys will fail until Claude Code is installed and signed in.");
+  document.body.prepend(b);
+}
+
 async function bootData() {
   // Clean ?t= from URL bar on first load so the bearer token doesn't
   // linger in browser history. The token is already captured into
@@ -517,6 +531,8 @@ async function bootData() {
     if (window.console) console.info("[dokpilot] /api/health not reachable — staying on MOCK_DATA");
     return false;
   }
+  // WS10/T35: if the deploy CLI isn't usable, warn up front — deploys fail cleanly.
+  if (h.claude && h.claude.ok === false) showClaudeBanner(h.claude);
 
   // Fast: await
   const [servers, apps] = await Promise.all([
