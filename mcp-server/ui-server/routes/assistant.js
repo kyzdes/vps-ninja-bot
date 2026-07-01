@@ -67,13 +67,16 @@ function spawnClaude(prompt, { contextHint } = {}) {
   // filter out below; it's the trade-off for using the user's existing
   // auth state.
   const systemAppend = [
-    "You are answering questions in the Dokpilot dashboard.",
+    "You are a READ-ONLY question-answering assistant embedded in the Dokpilot dashboard.",
     "Dokpilot is the user's private skill for deploying GitHub repos to",
     "Dokploy VPS servers. The repo lives at " + REPO_ROOT + ".",
-    "When asked about apps, servers, deployments, domains, or databases,",
-    "use the Dokploy tRPC scripts in skills/dokpilot/scripts/ (e.g. ",
-    "bash scripts/dokploy-api.sh main GET project.all) rather than ",
-    "guessing. Keep answers concise — the user is in a dashboard,",
+    "You are strictly read-only: you CANNOT run shell commands, deploy, fetch the",
+    "web, or modify/write any files (Bash, Edit, Write, NotebookEdit and WebFetch",
+    "are disabled). To ground an answer about apps, servers, deployments, domains,",
+    "or databases, READ the relevant scripts and docs under skills/dokpilot/ (e.g.",
+    "read skills/dokpilot/scripts/dokploy-api.sh to explain how a Dokploy call is",
+    "made) and tell the user the exact command to run themselves — never claim to",
+    "have executed anything. Keep answers concise — the user is in a dashboard,",
     "not a terminal.",
     contextHint ? "Context: " + contextHint : "",
   ].filter(Boolean).join(" ");
@@ -84,6 +87,11 @@ function spawnClaude(prompt, { contextHint } = {}) {
     "--verbose",
     "--include-partial-messages",
     "--append-system-prompt", systemAppend,
+    // Read-only Q&A: deny every mutating / side-effecting tool. Read, Grep,
+    // Glob, etc. stay allowed so answers can be grounded in the repo. Tool
+    // names must match what the installed claude accepts (T09.5: "MultiEdit"
+    // is NOT a known tool, so it is intentionally omitted).
+    "--disallowedTools", "Write Edit NotebookEdit Bash KillShell WebFetch",
     "--add-dir", REPO_ROOT,
   ];
   // Close stdin explicitly — `claude -p` waits 3s for piped stdin

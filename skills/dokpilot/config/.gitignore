@@ -1,6 +1,10 @@
 # Ignore all files in config directory (contains secrets)
 *
 
+# SSH TOFU host-key store written by ssh-exec.sh (default location).
+# Explicitly listed because it records server IPs — must never be committed.
+known_hosts
+
 # But track this .gitignore file
 !.gitignore
 

@@ -30,6 +30,24 @@ function zoneOf(host) {
 }
 
 /**
+ * Validate a DNS hostname before it is forwarded to Cloudflare or Dokploy.
+ * Rules: a non-empty string ≤253 chars, made of dot-separated LDH labels
+ * (letters/digits/hyphen, 1–63 chars each, no leading/trailing hyphen) with
+ * at least two labels, and NO scheme, port, path, or whitespace. This rejects
+ * URLs (http://…), `host:port`, `host/path`, and injection-y input before it
+ * can reach an external API.
+ */
+function isValidHost(host) {
+  if (typeof host !== "string") return false;
+  if (host.length === 0 || host.length > 253) return false;
+  if (/[\s\/\\:]/.test(host)) return false; // no whitespace, path, backslash, scheme/port colon
+  const labels = host.split(".");
+  if (labels.length < 2) return false;      // require host.tld at minimum
+  const labelRe = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+  return labels.every((l) => labelRe.test(l));
+}
+
+/**
  * GET /api/domains
  *   Returns every domain across all configured servers + their CF
  *   record state. Two-stage fetch:
@@ -141,6 +159,7 @@ async function updateDomain(req, res, ctx, params) {
   let body; try { body = await readBody(req); } catch (e) { return json(res, e.code || 400, { error: e.message }); }
   const server = body?.server;
   if (!server) return json(res, 400, { error: "missing-server" });
+  if (body.host != null && !isValidHost(body.host)) return json(res, 400, { error: "invalid-host" });
   const payload = { domainId: params.id };
   if (body.host != null) payload.host = body.host;
   if (body.port != null) payload.port = Number(body.port);
@@ -169,6 +188,7 @@ async function validateDomain(req, res, ctx) {
   const server = body?.server;
   const host = body?.host;
   if (!server || !host) return json(res, 400, { error: "missing-fields", required: ["server", "host"] });
+  if (!isValidHost(host)) return json(res, 400, { error: "invalid-host" });
   const cfg = readConfig({ maskSecrets: false });
   const serverIp = cfg.servers?.[server]?.host;
   if (!serverIp) return json(res, 400, { error: "unknown-server" });

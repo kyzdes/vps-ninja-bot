@@ -44,6 +44,21 @@ fi
 
 CF_API="https://api.cloudflare.com/client/v4"
 
+# URL-encode a value for safe use inside a query string (RFC 3986 via jq @uri).
+# Used for record/zone names so a domain with reserved chars can't smuggle
+# extra query params or break the URL.
+urlenc() {
+  printf '%s' "$1" | jq -sRr @uri
+}
+
+# Build an A-record JSON body with jq (no string interpolation → no JSON
+# injection from names/IPs). proxied is passed as a real JSON boolean.
+# Usage: cf_body <name> <ip> <proxied-bool>
+cf_body() {
+  jq -n --arg name "$1" --arg content "$2" --argjson proxied "$3" \
+    '{type: "A", name: $name, content: $content, proxied: $proxied, ttl: 1}'
+}
+
 cf_curl() {
   local method=$1 path=$2 body=${3:-}
   local args=(-s -S --max-time 15 -X "$method"
@@ -56,7 +71,7 @@ cf_curl() {
 # Get zone ID by domain (raw — no error output, used for probing)
 _get_zone_id_raw() {
   local zone_domain=$1
-  cf_curl GET "zones?name=${zone_domain}&status=active" | jq -r '.result[0].id // empty'
+  cf_curl GET "zones?name=$(urlenc "$zone_domain")&status=active" | jq -r '.result[0].id // empty'
 }
 
 # Extract zone domain from full domain (app.example.com → example.com)
@@ -85,7 +100,7 @@ get_zone_id() {
 # Find DNS record by name
 find_record() {
   local zone_id=$1 record_name=$2
-  cf_curl GET "zones/${zone_id}/dns_records?name=${record_name}&type=A" | jq -r '.result[0] // empty'
+  cf_curl GET "zones/${zone_id}/dns_records?name=$(urlenc "$record_name")&type=A" | jq -r '.result[0] // empty'
 }
 
 # Parse proxied argument: supports true, false, --no-proxy
@@ -118,15 +133,14 @@ case "$ACTION" in
     # Check if record exists
     EXISTING=$(find_record "$ZONE_ID" "$DOMAIN")
 
+    BODY=$(cf_body "$DOMAIN" "$IP" "$PROXIED")
     if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
       # Update existing record
       RECORD_ID=$(echo "$EXISTING" | jq -r '.id')
-      RESULT=$(cf_curl PUT "zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
-        "{\"type\":\"A\",\"name\":\"$DOMAIN\",\"content\":\"$IP\",\"proxied\":$PROXIED,\"ttl\":1}")
+      RESULT=$(cf_curl PUT "zones/${ZONE_ID}/dns_records/${RECORD_ID}" "$BODY")
     else
       # Create new record
-      RESULT=$(cf_curl POST "zones/${ZONE_ID}/dns_records" \
-        "{\"type\":\"A\",\"name\":\"$DOMAIN\",\"content\":\"$IP\",\"proxied\":$PROXIED,\"ttl\":1}")
+      RESULT=$(cf_curl POST "zones/${ZONE_ID}/dns_records" "$BODY")
     fi
 
     # Check for API errors
