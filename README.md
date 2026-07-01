@@ -54,7 +54,7 @@ Full walkthrough (add server → secret store → first deploy):
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v4.0.0-00FF41?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-v4.4.0-00FF41?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/pass_rate-100%25-00FF41?style=flat-square" alt="Pass Rate" />
   <img src="https://img.shields.io/badge/stacks-20+-blue?style=flat-square" alt="Stacks" />
   <img src="https://img.shields.io/badge/license-MIT-gray?style=flat-square" alt="License" />

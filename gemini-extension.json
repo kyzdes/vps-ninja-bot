@@ -1,6 +1,6 @@
 {
   "name": "dokpilot",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "description": "Deploy and manage applications on VPS servers with Dokploy. Use when the user wants to: set up a new VPS server, deploy a project from GitHub, manage domains/DNS, create databases, check server status, view logs, or remove deployed projects. Also use when the user mentions re-deploying, checking deploy status, adding environment variables, or troubleshooting a deployed app. Also triggers when users say things like \"put this on my server\", \"I need hosting\", \"make this accessible online\", \"my site is down\", \"set up CI/CD for deployment\", or anything related to getting code running on a remote server. Triggers on: VPS, deploy, server setup, Dokploy, hosting, domain, DNS, redeploy, server status, deploy logs, \"put online\", \"host this\", \"site down\", CI/CD.",
   "contextFileName": "GEMINI.md"
 }

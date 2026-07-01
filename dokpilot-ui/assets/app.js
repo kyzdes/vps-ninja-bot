@@ -111,7 +111,7 @@ const badge = (status) => {
 
 /* ─── MOCK DATA (mirrors the shipped dashboard seed, extended) ──────── */
 const DATA = window.DOKPILOT_DATA = {
-  meta:{ version:"v4.0.0", port:52114, token:"a8f0…c4d1" },
+  meta:{ version:"v4.4.0", port:52114, token:"a8f0…c4d1" },
   servers:[
     { id:"main", name:"main", ip:"203.0.113.10", ssh:"root", dokploy:"v0.29.5", status:"healthy", region:"Frankfurt · Hetzner",
       secret:"keychain", is_default:true, cpu:34, ram:62, disk:48, ram_gb:"5.0 / 8 GB", disk_gb:"96 / 200 GB", uptime:"23d 4h", apps:["app_001","app_002","app_003"] },

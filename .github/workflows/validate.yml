@@ -51,5 +51,8 @@ jobs:
           command -v shellcheck >/dev/null || sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           shellcheck -S warning scripts/*.sh skills/dokpilot/scripts/*.sh mcp-server/ui-server/lib/worker-helpers/*.sh
 
-      - name: smoke (boot + routes, CI mode)
-        run: node mcp-server/ui-server/smoke.js --ci
+      - name: Check version sync (SSOT = plugin.json)
+        run: bash scripts/check-version-sync.sh
+
+      - name: Unit + e2e + smoke tests
+        run: cd mcp-server/ui-server && npm test

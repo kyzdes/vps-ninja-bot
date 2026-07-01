@@ -11,7 +11,7 @@ module.exports = {
     catch { claude = { ok: null, state: "unknown", version: null, hint: null }; }
     json(res, 200, {
       status: "ok",
-      version: "v4.0.0",
+      version: "v4.4.0",
       port: ctx.port,
       pid: process.pid,
       uptime_s: Math.round(process.uptime()),

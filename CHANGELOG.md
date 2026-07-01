@@ -4,6 +4,63 @@ All notable changes to Dokpilot are documented in this file.
 
 ---
 
+## v4.4.0 — 2026-07-01
+
+Launch-readiness hardening (from the 2026-06-15 production-readiness audit:
+GO-WITH-CONDITIONS, ~72%). The deploy worker is now **two-phase** — the untrusted
+target repo is analyzed read-only, then a schema-**validated manifest** (never raw
+repo bytes) drives infra actuation; destroy is authorized by a server-minted nonce;
+the server **verifies** deploys instead of trusting the worker; and the skill is
+depersonalized + documented for external users.
+
+### Security
+- **Two-phase deploy worker (prompt-injection defense).** Phase A analyzes the repo
+  READ-ONLY (`--permission-mode default`, Read/Grep/Glob only, MCP stripped, no repo
+  write) → validated manifest. Phase B actuates infra (`bypassPermissions` for
+  Dokploy/SSH/DNS only) driven solely by that manifest — it never re-reads the repo.
+  A hard prompt guard + a paranoid manifest validator (rejects value-bearing env,
+  flags freeform/metachar commands for human review, never auto-runs them) are the
+  trust boundary.
+- **Server-minted destroy nonce.** Project/app/compose **and now database** deletes
+  require a single-use HMAC nonce the worker structurally cannot forge (the ui-server
+  bearer token is never in a worker's env). The skill-CLI path keeps the typed-name
+  confirm + env-flag backstop.
+- **Server-side deploy verification.** Before persisting `done`, the server re-fetches
+  `deployment.all` and requires terminal-success (an empty `{ok:true}` is not treated
+  as green); otherwise it surfaces `done-unconfirmed` (amber), never a false green.
+- **Script/route hardening.** ssh-exec single-quote escaper fixed (global) + `--selftest`;
+  SSH host keys pinned (`accept-new` + per-server known_hosts, TOFU); Cloudflare bodies
+  built with `jq -n` + URL-encoded names; dashboard domain-host validation; the Q&A
+  assistant runs with a write/shell tool deny-list; `claude.log` created `0600`.
+
+### Added
+- `SECURITY.md`, `CONTRIBUTING.md`, `.github/FUNDING.yml`, `references/install.md`, `RELEASING.md`.
+- **`claude` CLI preflight** — a deploy fails cleanly with an actionable hint if the CLI
+  is missing (+ a dashboard banner + `/api/health` `claude{}` block); a failed job's
+  error carries the tail of `claude.log` (DEP-3).
+- Zero-dep deploy-path **test harness** + verify-deploy tests; `npm test` runs the full
+  suite; `scripts/clean-machine-smoke.sh` proves a fresh Mode-B install boots to `/api/health`.
+- **Version-sync CI** — `scripts/check-version-sync.sh` (+ `bump-version.sh`) fail the build
+  on any version drift.
+
+### Changed
+- **Removed the fake-AI "Ask Claude" popovers** (they fake-typed canned diagnoses and did
+  nothing) — the real assistant (`assistant.html`, live `claude`) is the single honest AI surface.
+- **Depersonalized** every shipped file — the author's infra (IPs / domains / a hardcoded
+  2-node topology) is gone; agent-context topology is now data-driven from `servers.json`.
+- Cross-platform `launch.sh` (macOS/Linux, `--no-open`, `DOKPILOT_STATE_DIR`); README rewritten
+  with one canonical install (Mode B primary; marketplace Mode A "coming soon").
+
+### Fixed
+- A dangling `openPop` reference that threw a `ReferenceError` on every Escape keypress.
+
+### Not yet verified / pending
+- A **live** end-to-end two-phase deploy (real `claude` → real Dokploy) has not been asserted (KI-024).
+- `benchmarks/*` recorded evals still contain the author's infra — pending a decision
+  (accept as historical / regenerate / gitignore).
+
+---
+
 ## v4.3.0 — 2026-05-30
 
 Hardening + deploy reliability. First real e2e deploys ran and exposed that
