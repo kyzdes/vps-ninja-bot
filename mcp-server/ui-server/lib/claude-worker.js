@@ -262,7 +262,7 @@ function main() {
 
   const systemPrompt = buildDeploySystemPrompt({ manifest, source, job });
 
-  const claudeLogStream = fs.createWriteStream(CLAUDE_LOG, { flags: "a" });
+  const claudeLogStream = fs.createWriteStream(CLAUDE_LOG, { flags: "a", mode: 0o600 });
   claudeLogStream.write(`\n--- phase B (deploy) start ${new Date().toISOString()} pid=${process.pid} manifest_source=${source} ---\n`);
 
   const args = buildDeployArgs({ systemPrompt, skillDir: SKILL_DIR, helpersDir: HELPERS_DIR });

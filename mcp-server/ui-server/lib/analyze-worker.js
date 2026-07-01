@@ -220,7 +220,7 @@ async function main() {
   const JOB_FILE  = jobPath(id);
   const CLAUDE_LOG = JOB_FILE.replace(/\.json$/, ".claude.log");
   const MANIFEST_FILE = JOB_FILE.replace(/\.json$/, ".manifest.json");
-  const logStream = fs.createWriteStream(CLAUDE_LOG, { flags: "a" });
+  const logStream = fs.createWriteStream(CLAUDE_LOG, { flags: "a", mode: 0o600 });
   logStream.write(`\n--- phase A (analyze) start ${new Date().toISOString()} pid=${process.pid} ---\n`);
 
   // Mark Phase A running.
