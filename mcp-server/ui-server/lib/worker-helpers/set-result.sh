@@ -4,7 +4,7 @@
 # Usage: set-result.sh key=value [key=value ...]
 #
 # Examples:
-#   set-result.sh app_id=abc123 url=https://notes.kyzdes.dev server=main
+#   set-result.sh app_id=abc123 url=https://app.example.com server=main
 #   set-result.sh error="Build failed: missing env DATABASE_URL"
 #
 # All values are treated as strings (the schema is liberal — result is

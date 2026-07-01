@@ -8,7 +8,7 @@
 #   ask-user.sh <question-id> "<label>" select "opt1,opt2,opt3"  "<hint>"
 #
 # Examples:
-#   ANSWER=$(bash ask-user.sh q_api_url "NEXT_PUBLIC_API_URL" text "https://api.notes.kyzdes.dev" "Build-time public API endpoint")
+#   ANSWER=$(bash ask-user.sh q_api_url "NEXT_PUBLIC_API_URL" text "https://api.example.com" "Build-time public API endpoint")
 #   ANSWER=$(bash ask-user.sh q_db "Database" select "postgres 16,sqlite,none" "Pick the DB engine")
 #
 # Behavior:

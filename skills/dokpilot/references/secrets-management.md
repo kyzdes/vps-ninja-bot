@@ -71,7 +71,7 @@ writing items, so the default ACL is tight.
 Via the skill:
 
 ```
-/dokpilot config server add main 45.55.67.89
+/dokpilot config server add main 203.0.113.10
 # prompts (hidden) for the API key, asks Keychain vs file
 ```
 

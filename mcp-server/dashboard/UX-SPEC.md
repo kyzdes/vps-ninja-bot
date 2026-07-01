@@ -1,8 +1,8 @@
 # UX Spec — Dokpilot Companion Dashboard
 
-Generated 2026-05-24. Skill: Dokpilot v4.0.0. Owner: kyzdes (single-user, macOS).
+Generated 2026-05-24. Skill: Dokpilot v4.0.0. Owner: single-user operator (macOS).
 
-> Inferred from `/Users/viacheslavkuznetsov/.claude/plans/distributed-napping-toast.md` Phase D and `KYZ-74`.
+> Inferred from internal planning notes (Phase D).
 
 ---
 
@@ -10,13 +10,13 @@ Generated 2026-05-24. Skill: Dokpilot v4.0.0. Owner: kyzdes (single-user, macOS)
 
 **Product.** Dokpilot Companion Dashboard — a local-only web UI that mirrors and steers a CLI skill that deploys GitHub repos to VPS servers running Dokploy.
 
-**Audience.** A single developer operator (kyzdes). Power user. Knows the CLI flow but wants a faster visual scan and a less-typing wizard for the common "deploy this repo to that server" case. Runs on macOS.
+**Audience.** A single developer operator. Power user. Knows the CLI flow but wants a faster visual scan and a less-typing wizard for the common "deploy this repo to that server" case. Runs on macOS.
 
 **JTBD.** (i) Glance at "what's running where" without typing four CLI commands; (ii) deploy a repo to a server with as few keystrokes as paste→pick→submit; (iii) watch a live deploy without tailing logs in a terminal.
 
 **Platform.** Localhost desktop web app at `http://127.0.0.1:<port>`. Launched by `/dokpilot ui`. macOS browser (Safari/Chrome/Arc). No mobile.
 
-**Existing context.** keys-keeper plugin (also kyzdes) as visual reference — dark surfaces, mono-typed technical content, accent for state, no enterprise SaaS chrome. Brand tokens: dark base (#0a0a0a–#111), neon-green primary (~#39ff14), monospace heading + body.
+**Existing context.** keys-keeper plugin as visual reference — dark surfaces, mono-typed technical content, accent for state, no enterprise SaaS chrome. Brand tokens: dark base (#0a0a0a–#111), neon-green primary (~#39ff14), monospace heading + body.
 
 **Archetype.** `internal-tool` / single-tenant dashboard. Density-leaning, not marketing-leaning.
 
@@ -194,7 +194,7 @@ N/A — `hi-fi-static`. Produce `mcp-server/dashboard/public/index.html` and `mc
 N/A for `hi-fi-static`. If we ever switch to `cjm-canvas` in a future iteration, the prompt would read:
 
 ```
-Lock these design choices into the UX spec at /Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/mcp-server/dashboard/UX-SPEC.md:
+Lock these design choices into the UX spec at mcp-server/dashboard/UX-SPEC.md:
 
 Global:
 - §8.4 DIM 4 ACCENT: <selected>
@@ -244,7 +244,7 @@ Screen S1 · Dashboard home:
 ## Hand-off
 
 ```
-Read this UX spec at /Users/viacheslavkuznetsov/Desktop/Projects/VPS-NINJA/mcp-server/dashboard/UX-SPEC.md. Produce a hi-fi-static deliverable: a single static index.html + styles.css under mcp-server/dashboard/public/ that renders S1, S2, S3, S4, S5 with the MOCK_DATA seed described in §8.7. Density type: dense/data-driven. Honor §8.3 per-screen position-4 answers. Use the keys-keeper visual vocabulary referenced in §7 (browser-frame chrome NOT required — this is the actual dashboard, not a canvas explorer; ship a real frontend). Accent: neon-green (#39ff14-leaning); replace keys-keeper's terracotta tokens. No build step. Vanilla JS only. Tailwind via Play CDN OK.
+Read this UX spec at mcp-server/dashboard/UX-SPEC.md. Produce a hi-fi-static deliverable: a single static index.html + styles.css under mcp-server/dashboard/public/ that renders S1, S2, S3, S4, S5 with the MOCK_DATA seed described in §8.7. Density type: dense/data-driven. Honor §8.3 per-screen position-4 answers. Use the keys-keeper visual vocabulary referenced in §7 (browser-frame chrome NOT required — this is the actual dashboard, not a canvas explorer; ship a real frontend). Accent: neon-green (#39ff14-leaning); replace keys-keeper's terracotta tokens. No build step. Vanilla JS only. Tailwind via Play CDN OK.
 ```
 
 Round-trip: huashu produces the static prototype with MOCK_DATA; Phase E wires the real backend; no canvas iteration needed for v1.

@@ -125,21 +125,21 @@ dokpilot runs in one of **three modes**, recorded in `config/servers.json` → `
 | `independent` | N servers, each its OWN Dokploy panel | which **panel** (`servers.<name>`) by purpose/isolation | hard isolation: prod/staging/clients/regions, no shared SPOF |
 | `cluster` | one panel, multiple **nodes** via `serverId` | which **node** (see placement below) | one admin UI + balance load across boxes |
 
-**Proactively propose a mode** when the user is setting up, adding a 2nd+ server, or asking how to scale/balance — present the three, recommend one for their goal, state the trade-off in one line. Don't assume silently. Modes can be mixed; switching paths are in `references/topology-modes.md`. Current config mode: **`cluster`** (panel `https://dokploy.moone.dev` over nodes A + B).
+**Proactively propose a mode** when the user is setting up, adding a 2nd+ server, or asking how to scale/balance — present the three, recommend one for their goal, state the trade-off in one line. Don't assume silently. Modes can be mixed; switching paths are in `references/topology-modes.md`. **Read the active mode from `config/servers.json` → `"mode"` at runtime — never assume a topology.** If the field is absent or the file doesn't exist yet, treat it as **`single`** (one server, no cluster).
 
 ### Multi-node placement — which node (cluster mode)
 
-In `cluster` mode the panel (`https://dokploy.moone.dev`) is **one control plane managing multiple nodes**. Before deploying a NEW app, decide WHICH node it lands on, then set `serverId` in the API body (`null` = node A / local, the node's `server_id` = remote). Read the node list from `config/servers.json` → `servers.main.nodes`. (In `single` mode skip this; in `independent` mode you choose a *panel*, not a node.)
+In `cluster` mode the panel is **one control plane managing multiple nodes**. Before deploying a NEW app, decide WHICH node it lands on, then set `serverId` in the API body (`null`/omit = the panel host / local node, a node's `server_id` = a remote node). **Read the node list from `config/servers.json` → `servers.<panel>.nodes` at runtime** — there is no built-in node set; a fresh single-server config has no `nodes`, so skip placement. (In `single` mode skip this; in `independent` mode you choose a *panel*, not a node.)
 
-**RAM is the binding constraint (CPU is idle on both).** Quick rule — full policy in `references/server-placement.md`:
+**RAM is usually the binding constraint (CPU is often idle).** Quick rule — full policy in `references/server-placement.md`:
 
-1. Check live free RAM on both nodes (`free -h` via SSH) — balance is dynamic, don't trust stale numbers.
+1. Check live free RAM on each node (`free -h` via SSH) — balance is dynamic, don't trust stale numbers.
 2. **Co-location wins:** related/stateful service → same node as its stack (nodes are separate swarms; internal networks don't span them).
-3. Light (<512 MiB: landing/static/bot) → **A**. Heavy (>1 GiB) → node with more free RAM, keep ≥1.5 GiB free after deploy; independent heavy → prefer **B**.
-4. **Never induce swap.** If neither node fits, tell the user — don't deploy silently.
-5. B is NOT empty (carries the LLM stack ~3 GiB); hostnames are inverted — key off IP/serverId.
+3. Light (<512 MiB: landing/static/bot) → the light-app / control-plane host. Heavy (>1 GiB) → the node with more free RAM right now, keeping ≥1.5 GiB free after deploy.
+4. **Never induce swap.** If no node fits, tell the user — don't deploy silently.
+5. Don't trust node roles or hostnames blindly — a node may already carry a heavy stack, and internal hostnames can be misleading. Key off live metrics + IP/serverId from `config/servers.json`, not names.
 
-When the user says "deploy X" without naming a node, **recommend one with a one-line reason** ("recommending B — co-located with your LLM stack").
+When the user says "deploy X" without naming a node, **recommend one with a one-line reason** ("recommending the compute node — co-located with the stack it talks to").
 
 ## Getting documentation
 
@@ -434,12 +434,30 @@ Delete database (after confirmation).
 > own message clearly and unambiguously asked to destroy *that specific*
 > resource. Any doubt → stop and ask first.
 >
-> **Technical backstop:** `dokploy-api.sh` REFUSES `project.remove`,
-> `application.delete`, and `compose.delete` unless the env
-> `DOKPILOT_CONFIRM_DESTROY=1` is set for that call. Set it **only** on the
-> individual delete commands, and **only after** the typed-name confirmation
-> above — e.g. `DOKPILOT_CONFIRM_DESTROY=1 bash scripts/dokploy-api.sh <server>
-> POST application.delete '{"applicationId":"…"}'`. Never export it globally.
+> **Technical backstop:** `dokploy-api.sh` REFUSES every irreversible delete —
+> `project.remove`, `application.delete`, `compose.delete`, AND the database
+> drops `postgres.remove` / `mysql.remove` / `mariadb.remove` / `mongo.remove` /
+> `redis.remove` / `libsql.remove` (these destroy user DATA) — unless the call is
+> authorized. There are two authorization paths, and the script picks based on
+> whether `UI_VERIFY_URL` is set:
+>
+> - **CLI path (you, the skill, in a terminal):** `UI_VERIFY_URL` is NOT set, so
+>   the script proceeds only if `DOKPILOT_CONFIRM_DESTROY=1` is set for **that
+>   one call** — set it **only after** the typed-name confirmation above, e.g.
+>   `DOKPILOT_CONFIRM_DESTROY=1 bash scripts/dokploy-api.sh <server> POST
+>   application.delete '{"applicationId":"…"}'`. **Never export it globally** or
+>   as a default in a shared profile.
+> - **UI path (the dashboard Remove button):** the ui-server mints a
+>   **server-minted, single-use, HMAC-signed nonce** (keyed on the per-launch
+>   bearer token) and threads `DOKPILOT_DESTROY_NONCE` + `UI_VERIFY_URL` +
+>   `UI_TOKEN` into the script **for that one call** (`exec.dokployDestroy()`).
+>   The script then calls back to `POST /api/destroy/verify` and proceeds only if
+>   the nonce verifies and is consumed. It **fails closed** on any network error
+>   or a non-`ok` response. The deploy/analyze worker is spawned **without** the
+>   ui-server bearer token in its env, so a prompt-injected worker can neither
+>   mint a nonce nor call the verify endpoint — it is structurally locked out of
+>   authorizing a destroy. **Never thread the ui-server token into any worker
+>   env.**
 
 **Syntax:** `destroy <project-name> [--keep-db] [--keep-dns] [--server <name>]`
 
@@ -469,16 +487,34 @@ Key improvements in v3.1:
 - The deploy report should mention: "Auto-deploy is active via GitHub App. Push to `<branch>` to trigger redeploy."
 - If user asks to redeploy, use `application.redeploy` API endpoint
 
-**`/dokpilot deploy --job <id>`** — worker mode (v4.0+).
+**`/dokpilot deploy --job <id>`** — worker mode (v4.0+; **two-phase since v4.4 / D-019**).
 
-When invoked with `--job`, you are a backgrounded deploy worker driven by the dashboard's job queue. The job spec is at `$JOB_PATH` (env var). Use the helpers under `$HELPERS_DIR` (also env):
+The dashboard's `POST /api/jobs/deploy` spawns a **two-phase** worker (never the app repo as instructions):
 
-- `update-status.sh <state>` — lifecycle transitions
+- **Phase A — analyze (read-only):** `mcp-server/ui-server/lib/analyze-worker.js` runs
+  `scripts/scan-repo.sh` (shallow throwaway clone, reads no file contents) then a Claude under
+  `--permission-mode default` with **only** Read/Grep/Glob (MCP stripped, no `--add-dir` of the
+  repo) that emits a **stack manifest**. `lib/manifest.js` `validateManifest()` is the single
+  trust boundary: it strips injected keys, rejects value-bearing env entries (D-012), and FLAGS
+  (never runs) freeform/metachar build/start commands. On success it writes a `0600` manifest
+  file and spawns Phase B **without** the ui-server token.
+- **Phase B — deploy (`bypassPermissions`, infra only):** `lib/claude-worker.js` consumes the
+  validated manifest as the **source of truth** and **never re-reads the repo**. It runs the
+  Dokploy tRPC + Cloudflare DNS flow behind the mandatory plan-then-confirm gate, surfacing any
+  flagged commands for human review. Phase A's cost is summed into the final `cost_usd`.
+
+When invoked manually with `--job`, you are a backgrounded worker; the job spec is at `$JOB_PATH`
+(env) and helpers are under `$HELPERS_DIR`:
+
+- `update-status.sh <state>` — lifecycle transitions (`analyzing-repo | analyzing-stack | awaiting-answers | deploying | wait-dns | finalizing | done | error`)
 - `log.sh <kind> "<message>"` — append a log line
 - `ask-user.sh <id> "<label>" <type> "<extra>" "<hint>"` — blocking question
 - `set-result.sh key=value ...` — final result
 
-The full worker prompt + helper protocol is in `mcp-server/ui-server/lib/claude-worker.js`. The dashboard's `POST /api/jobs/deploy` already spawns this flow automatically — manual `/dokpilot deploy --job <id>` is only for restarting or debugging a stuck job.
+Guard text shared by both phases is in `lib/worker-guard.js`. `DOKPILOT_WORKER=mock` runs the
+demo loop (`lib/mock-worker.js`); `DOKPILOT_WORKER=claude` runs Phase B directly (resume/back-compat
+of a job that already carries a manifest). Manual `/dokpilot deploy --job <id>` is only for
+restarting or debugging a stuck job.
 
 ### `/dokpilot ui` — Launch local web dashboard
 
@@ -540,7 +576,7 @@ Commands:
 
 Examples:
 
-  /dokpilot setup 45.55.67.89 MyPassword123
+  /dokpilot setup 203.0.113.10 MyPassword123
   /dokpilot deploy github.com/user/my-app --domain app.example.com
   /dokpilot status
   /dokpilot logs my-app --build

@@ -10,7 +10,7 @@
 #   ssh-exec.sh main "uname -a"
 #   ssh-exec.sh main "docker ps"
 #   ssh-exec.sh main "free -h && df -h"
-#   ssh-exec.sh --password MyPass123 45.55.67.89 "apt update"
+#   ssh-exec.sh --password MyPass123 203.0.113.10 "apt update"
 #   ssh-exec.sh --bg main "docker build -t app ." "/tmp/build.log"
 #   ssh-exec.sh --poll main "docker build" "/tmp/build.log"
 #

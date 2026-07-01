@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "/dokpilot deploy github.com/kyzdes/my-nextjs-app --domain app.kyzdes.com",
+      "prompt": "/dokpilot deploy github.com/your-name/my-nextjs-app --domain app.example.com",
       "expected_output": "The skill should: 1) Read deploy-guide.md (not search web), 2) Clone repo and detect Next.js stack, 3) Create project with environmentId, 4) Set up DNS with --no-proxy, 5) Deploy via API, 6) After deploy, mention that auto-deploy is active via GitHub App (NOT suggest webhook setup), 7) NOT search the web for Dokploy docs",
       "files": [],
       "assertions": [
@@ -69,7 +69,7 @@
     },
     {
       "id": 3,
-      "prompt": "/dokpilot setup 185.22.64.10 MyR00tPass456",
+      "prompt": "/dokpilot setup 203.0.113.11 MyR00tPass456",
       "expected_output": "The skill should: 1) Read setup-guide.md (not search web), 2) SSH to server, check resources, 3) Install Dokploy, 4) Wait for Dokploy to become available, 5) Ask user to create admin account in UI and provide API key, 6) On macOS, offer Keychain as the default storage for the API key (user can opt for plain file), 7) Save server config to servers.json with {\"_secret\": ...} reference when Keychain is chosen, 8) Report completion with next steps",
       "files": [],
       "assertions": [

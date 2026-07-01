@@ -43,10 +43,10 @@ Secret fields are replaced by a reference of the shape `{"_secret": "<keychain-a
 {
   "servers": {
     "main": {
-      "host": "77.90.43.8",
+      "host": "203.0.113.10",
       "ssh_user": "root",
       "ssh_key": "/Users/.../id_rsa",
-      "dokploy_url": "http://77.90.43.8:3000",
+      "dokploy_url": "http://203.0.113.10:3000",
       "dokploy_api_key": { "_secret": "main:dokploy_api_key" },
       "added_at": "2026-02-19T11:15:00Z"
     }

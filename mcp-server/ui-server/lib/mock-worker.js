@@ -177,9 +177,9 @@ async function run() {
   writeJob(job);
   await sleep(1100);
 
-  const targetDomain = job.domain || (job.repo.split("/").pop() + ".kyzdes.dev");
+  const targetDomain = job.domain || (job.repo.split("/").pop() + ".example.com");
   job = readJob(id);
-  appendLog(job, "ok", `DNS A record → 77.90.43.8 created (Cloudflare, no-proxy)`);
+  appendLog(job, "ok", `DNS A record → 203.0.113.10 created (Cloudflare, no-proxy)`);
   appendLog(job, "ok", `Let's Encrypt cert issued for ${targetDomain}`);
   writeJob(job);
   await sleep(500);

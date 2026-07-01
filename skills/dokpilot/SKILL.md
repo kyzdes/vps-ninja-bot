@@ -125,21 +125,21 @@ dokpilot runs in one of **three modes**, recorded in `config/servers.json` → `
 | `independent` | N servers, each its OWN Dokploy panel | which **panel** (`servers.<name>`) by purpose/isolation | hard isolation: prod/staging/clients/regions, no shared SPOF |
 | `cluster` | one panel, multiple **nodes** via `serverId` | which **node** (see placement below) | one admin UI + balance load across boxes |
 
-**Proactively propose a mode** when the user is setting up, adding a 2nd+ server, or asking how to scale/balance — present the three, recommend one for their goal, state the trade-off in one line. Don't assume silently. Modes can be mixed; switching paths are in `references/topology-modes.md`. Current config mode: **`cluster`** (panel `https://dokploy.moone.dev` over nodes A + B).
+**Proactively propose a mode** when the user is setting up, adding a 2nd+ server, or asking how to scale/balance — present the three, recommend one for their goal, state the trade-off in one line. Don't assume silently. Modes can be mixed; switching paths are in `references/topology-modes.md`. **Read the active mode from `config/servers.json` → `"mode"` at runtime — never assume a topology.** If the field is absent or the file doesn't exist yet, treat it as **`single`** (one server, no cluster).
 
 ### Multi-node placement — which node (cluster mode)
 
-In `cluster` mode the panel (`https://dokploy.moone.dev`) is **one control plane managing multiple nodes**. Before deploying a NEW app, decide WHICH node it lands on, then set `serverId` in the API body (`null` = node A / local, the node's `server_id` = remote). Read the node list from `config/servers.json` → `servers.main.nodes`. (In `single` mode skip this; in `independent` mode you choose a *panel*, not a node.)
+In `cluster` mode the panel is **one control plane managing multiple nodes**. Before deploying a NEW app, decide WHICH node it lands on, then set `serverId` in the API body (`null`/omit = the panel host / local node, a node's `server_id` = a remote node). **Read the node list from `config/servers.json` → `servers.<panel>.nodes` at runtime** — there is no built-in node set; a fresh single-server config has no `nodes`, so skip placement. (In `single` mode skip this; in `independent` mode you choose a *panel*, not a node.)
 
-**RAM is the binding constraint (CPU is idle on both).** Quick rule — full policy in `references/server-placement.md`:
+**RAM is usually the binding constraint (CPU is often idle).** Quick rule — full policy in `references/server-placement.md`:
 
-1. Check live free RAM on both nodes (`free -h` via SSH) — balance is dynamic, don't trust stale numbers.
+1. Check live free RAM on each node (`free -h` via SSH) — balance is dynamic, don't trust stale numbers.
 2. **Co-location wins:** related/stateful service → same node as its stack (nodes are separate swarms; internal networks don't span them).
-3. Light (<512 MiB: landing/static/bot) → **A**. Heavy (>1 GiB) → node with more free RAM, keep ≥1.5 GiB free after deploy; independent heavy → prefer **B**.
-4. **Never induce swap.** If neither node fits, tell the user — don't deploy silently.
-5. B is NOT empty (carries the LLM stack ~3 GiB); hostnames are inverted — key off IP/serverId.
+3. Light (<512 MiB: landing/static/bot) → the light-app / control-plane host. Heavy (>1 GiB) → the node with more free RAM right now, keeping ≥1.5 GiB free after deploy.
+4. **Never induce swap.** If no node fits, tell the user — don't deploy silently.
+5. Don't trust node roles or hostnames blindly — a node may already carry a heavy stack, and internal hostnames can be misleading. Key off live metrics + IP/serverId from `config/servers.json`, not names.
 
-When the user says "deploy X" without naming a node, **recommend one with a one-line reason** ("recommending B — co-located with your LLM stack").
+When the user says "deploy X" without naming a node, **recommend one with a one-line reason** ("recommending the compute node — co-located with the stack it talks to").
 
 ## Getting documentation
 
@@ -576,7 +576,7 @@ Commands:
 
 Examples:
 
-  /dokpilot setup 45.55.67.89 MyPassword123
+  /dokpilot setup 203.0.113.10 MyPassword123
   /dokpilot deploy github.com/user/my-app --domain app.example.com
   /dokpilot status
   /dokpilot logs my-app --build

@@ -3,7 +3,7 @@
 # Usage: wait-ready.sh <url> [timeout_seconds] [interval_seconds]
 #
 # Examples:
-#   wait-ready.sh http://45.55.67.89:3000 180
+#   wait-ready.sh http://203.0.113.10:3000 180
 #   wait-ready.sh https://app.example.com 120 5
 #
 # Exit codes: 0 = ready, 1 = timeout

@@ -622,7 +622,7 @@ Get information about a PostgreSQL instance, including connection strings.
   "databaseName": "myapp",
   "databaseUser": "myapp",
   "internalDatabaseUrl": "postgresql://myapp:password@my-db:5432/myapp",
-  "externalDatabaseUrl": "postgresql://myapp:password@45.55.67.89:5432/myapp"
+  "externalDatabaseUrl": "postgresql://myapp:password@203.0.113.10:5432/myapp"
 }
 ```
 

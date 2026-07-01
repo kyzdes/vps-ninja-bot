@@ -109,13 +109,13 @@ window.pageInit = ({ el, icon, toast }) => {
   const ANSWERS = [
     { match:/metrics|fail|error|broken/i,
       steps:["Read deploy job d_007 · metrics-collector","Fetched container exit log via ssh-exec.sh"],
-      text:"<strong>metrics-collector</strong> is failing at startup, not at build. Prometheus refuses to boot because the first <code>scrape_config</code> in <code>prometheus.yml</code> has no <strong>job_name</strong> — that field is required.<br><br>Smallest fix: add <code>job_name: 'self'</code> under that scrape block and redeploy. I can open a one-line PR on <code>kyzdes/metrics-collector</code> and redeploy the moment it merges. Want me to?" },
+      text:"<strong>metrics-collector</strong> is failing at startup, not at build. Prometheus refuses to boot because the first <code>scrape_config</code> in <code>prometheus.yml</code> has no <strong>job_name</strong> — that field is required.<br><br>Smallest fix: add <code>job_name: 'self'</code> under that scrape block and redeploy. I can open a one-line PR on <code>your-name/metrics-collector</code> and redeploy the moment it merges. Want me to?" },
     { match:/deploy|ship|launch/i,
       steps:["Validated GitHub URL","Picked least-loaded server: main (34% cpu)"],
       text:"Sure — paste the repo and I'll detect the stack, set up the domain, and provision any database it needs. I'll only stop to ask you the values I genuinely can't infer (like a public API URL). Open the <strong>Deploy</strong> screen and I'll take it from there." },
     { match:/.*/,
       steps:["Read config/servers.json","Queried Dokploy on main + edge"],
-      text:"Right now you have <strong>5 apps</strong> across 2 servers: 4 running, 1 building (<code>dokpilot-landing</code>), and 1 needs attention (<code>metrics-collector</code>). Your busiest host is <strong>edge</strong> at 71% CPU. Anything you'd like me to dig into or fix?" },
+      text:"Right now you have <strong>5 apps</strong> across 2 servers: 4 running, 1 building (<code>landing-page</code>), and 1 needs attention (<code>metrics-collector</code>). Your busiest host is <strong>edge</strong> at 71% CPU. Anything you'd like me to dig into or fix?" },
   ];
 
   function addMsg(role, builder) {

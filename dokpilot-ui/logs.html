@@ -61,10 +61,10 @@
         </p></div>
       </div>
       <div class="md-layout" style="grid-template-columns:280px 1fr">
-        <div class="md-list" id="stream-list" data-fallback=""><button class="md-item active" type="button"><div class="md-name" style="font-size: var(--text-base);">dokpilot-landing<span class="badge badge-info"><span class="dot dot-info dot-pulse"></span><span class="lbl" data-adv="">building</span><span class="lbl" data-simple="">Building…</span></span></div><div class="md-sub">on main</div></button><button class="md-item" type="button"><div class="md-name" style="font-size: var(--text-base);">metrics-collector<span class="badge badge-danger"><span class="dot dot-danger"></span><span class="lbl" data-adv="">error</span><span class="lbl" data-simple="">Needs attention</span></span></div><div class="md-sub">on edge</div></button><button class="md-item" type="button"><div class="md-name" style="font-size: var(--text-base);">kyzdes-portfolio<span class="badge badge-success"><span class="dot dot-success"></span><span class="lbl" data-adv="">running</span><span class="lbl" data-simple="">Live</span></span></div><div class="md-sub">on main</div></button></div>
+        <div class="md-list" id="stream-list" data-fallback=""><button class="md-item active" type="button"><div class="md-name" style="font-size: var(--text-base);">landing-page<span class="badge badge-info"><span class="dot dot-info dot-pulse"></span><span class="lbl" data-adv="">building</span><span class="lbl" data-simple="">Building…</span></span></div><div class="md-sub">on main</div></button><button class="md-item" type="button"><div class="md-name" style="font-size: var(--text-base);">metrics-collector<span class="badge badge-danger"><span class="dot dot-danger"></span><span class="lbl" data-adv="">error</span><span class="lbl" data-simple="">Needs attention</span></span></div><div class="md-sub">on edge</div></button><button class="md-item" type="button"><div class="md-name" style="font-size: var(--text-base);">web-app<span class="badge badge-success"><span class="dot dot-success"></span><span class="lbl" data-adv="">running</span><span class="lbl" data-simple="">Live</span></span></div><div class="md-sub">on main</div></button></div>
         <section class="card">
           <div class="card-head">
-            <span class="row" style="gap:8px"><span class="dot dot-info dot-pulse" id="stream-dot" data-fallback=""></span><h3 id="stream-name">dokpilot-landing</h3></span>
+            <span class="row" style="gap:8px"><span class="dot dot-info dot-pulse" id="stream-dot" data-fallback=""></span><h3 id="stream-name">landing-page</h3></span>
             <div class="row" style="gap:6px;margin-left:auto">
               <div class="row" data-adv="" style="gap:4px" id="filters" data-fallback=""><button class="pill" style="cursor: pointer;">info</button><button class="pill" style="cursor: pointer;">ok</button><button class="pill" style="cursor: pointer;">warn</button><button class="pill" style="cursor: pointer;">error</button></div>
               <button class="btn btn-ghost btn-sm" id="pause-btn"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></span>Pause</button>
@@ -93,7 +93,7 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
   // When in MOCK mode (file:// / no token), the hardcoded mock streams
   // below remain and the setInterval simulation kicks in instead.
   const STREAMS_MOCK = {
-    app_003: { name:"dokpilot-landing", status:"building", server:"main",
+    app_003: { name:"landing-page", status:"building", server:"main",
       seed:[
         {t:"11:30:02",kind:"cmd",text:"$ pnpm install --frozen-lockfile"},
         {t:"11:30:04",kind:"info",text:"Lockfile is up to date, resolving…"},
@@ -106,10 +106,10 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
         {kind:"info",text:"[astro] generating static routes (51/64)…"},
         {kind:"info",text:"[astro] bundling client islands…"},
         {kind:"ok",text:"[astro] 64 pages built in 28.4s"},
-        {kind:"cmd",text:"$ docker build -t dokpilot-landing:88b4197 ."},
+        {kind:"cmd",text:"$ docker build -t landing-page:88b4197 ."},
         {kind:"info",text:"=> exporting layers"},
         {kind:"ok",text:"Image pushed · deploying to main…"},
-        {kind:"ok",text:"Container healthy · https://dokpilot.dev live"},
+        {kind:"ok",text:"Container healthy · https://app.example.com live"},
       ]},
     app_005: { name:"metrics-collector", status:"error", server:"edge",
       seed:[
@@ -120,11 +120,11 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
         {t:"03:00:06",kind:"error",text:"prometheus: error loading config from /etc/prometheus/prometheus.yml"},
         {t:"03:00:06",kind:"err",text:"container exited (code 1)"},
       ], live:[] },
-    app_001: { name:"kyzdes-portfolio", status:"running", server:"main",
+    app_001: { name:"web-app", status:"running", server:"main",
       seed:[
         {t:"08:12:00",kind:"cmd",text:"$ next build"},
         {t:"08:12:41",kind:"ok",text:"Compiled successfully · 18 routes"},
-        {t:"08:12:47",kind:"ok",text:"Deployed · https://kyzdes.com (47s)"},
+        {t:"08:12:47",kind:"ok",text:"Deployed · https://example.com (47s)"},
       ], live:[] },
   };
 

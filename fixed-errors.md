@@ -27,7 +27,7 @@ GITHUB_ID=$(echo "$PROVIDERS" | jq -r '[.[] | select(.providerType == "github")]
 # Step 2: Save GitHub provider for the application
 bash scripts/dokploy-api.sh "$SERVER" POST application.saveGithubProvider '{
   "applicationId": "...",
-  "owner": "kyzdes",
+  "owner": "your-name",
   "repository": "repo-name",
   "branch": "main",
   "buildPath": "/",

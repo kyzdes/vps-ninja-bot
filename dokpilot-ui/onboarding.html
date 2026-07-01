@@ -140,7 +140,7 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
           el("div", { class:"md-sub" }, s.ip + (s.dokploy?" · dokploy "+s.dokploy:"")))));
     } else {
       const nameI = el("input", { class:"input mono", placeholder:"my-server", value:W.server.name });
-      const hostI = el("input", { class:"input mono", placeholder:"77.90.43.8", value:W.server.host });
+      const hostI = el("input", { class:"input mono", placeholder:"203.0.113.10", value:W.server.host });
       const userSel = el("select", { class:"select mono" }, ...["root","ubuntu","admin","debian"].map(u => el("option", { value:u, selected: u===W.server.ssh_user?"true":null }, u)));
       const keyI = el("input", { class:"input mono", placeholder:"~/.ssh/id_ed25519", value:W.server.ssh_key });
       nameI.oninput = ()=>W.server.name=nameI.value.trim();

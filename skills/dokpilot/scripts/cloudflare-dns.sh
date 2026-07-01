@@ -7,10 +7,10 @@
 #   cloudflare-dns.sh get    <full-domain>
 #
 # Examples:
-#   cloudflare-dns.sh create app.example.com 45.55.67.89           # proxied (default)
-#   cloudflare-dns.sh create app.example.com 45.55.67.89 true      # proxied
-#   cloudflare-dns.sh create app.example.com 45.55.67.89 false     # DNS-only
-#   cloudflare-dns.sh create app.example.com 45.55.67.89 --no-proxy  # DNS-only (alias)
+#   cloudflare-dns.sh create app.example.com 203.0.113.10           # proxied (default)
+#   cloudflare-dns.sh create app.example.com 203.0.113.10 true      # proxied
+#   cloudflare-dns.sh create app.example.com 203.0.113.10 false     # DNS-only
+#   cloudflare-dns.sh create app.example.com 203.0.113.10 --no-proxy  # DNS-only (alias)
 #   cloudflare-dns.sh delete app.example.com
 #   cloudflare-dns.sh list example.com
 #
