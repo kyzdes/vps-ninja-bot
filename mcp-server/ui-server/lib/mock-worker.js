@@ -29,7 +29,10 @@ const { readJob, writeJob } = require("./jobs");
 const id = process.argv[2];
 if (!id) { console.error("usage: mock-worker.js <job-id>"); process.exit(2); }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// DOKPILOT_MOCK_FAST shrinks every sleep (hermetic tests / CI — T33). The lifecycle
+// and state transitions are identical; only the wall-clock delays collapse.
+const SLEEP_SCALE = process.env.DOKPILOT_MOCK_FAST ? 0.02 : 1;
+const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, Math.round(ms * SLEEP_SCALE))));
 
 function ts() { return new Date().toTimeString().slice(0, 8); }
 
@@ -47,9 +50,27 @@ async function run() {
   let job = readJob(id);
   if (!job) { console.error("job not found:", id); process.exit(2); }
 
-  // Stage 1: pending → analyzing-stack
-  job.status = "analyzing-stack";
+  // Stage 0: pending → analyzing-repo (Phase A — read-only clone + manifest)
+  job.status = "analyzing-repo";
   job.worker = { pid: process.pid, started_at: new Date().toISOString(), host: "mock" };
+  setStep(job, "analyze", "active");
+  appendLog(job, "info", `Analyzing ${job.repo} (branch: ${job.branch}) — read-only clone…`);
+  writeJob(job);
+  await sleep(700);
+
+  job = readJob(id);
+  // Synthetic validated manifest (a real deploy gets this from Phase A).
+  job.manifest = { manifest_schema_version: 1, stack: "unknown", port: null, build_type: "nixpacks", env_keys_needed: [], db_needs: [] };
+  job.manifest_validation = { ok: true, flags: [], errors: [] };
+  job.cost_phase_a = 0.0021;
+  appendLog(job, "ok", "Manifest: stack analyzed (mock)");
+  setStep(job, "analyze", "done");
+  writeJob(job);
+  await sleep(300);
+
+  // Stage 1: analyzing-repo → analyzing-stack
+  job = readJob(id);
+  job.status = "analyzing-stack";
   setStep(job, "detect", "active");
   appendLog(job, "info", `Cloning ${job.repo} (branch: ${job.branch})…`);
   writeJob(job);
@@ -175,6 +196,9 @@ async function run() {
   job = readJob(id);
   appendLog(job, "ok", "Container healthy");
   setStep(job, "finalize", "done");
+  // Synthetic cost so the UI / e2e can exercise the cost-capture path without a
+  // live Claude run. A real deploy gets this from the stream-json `result` message.
+  job.cost_usd = 0.0123;
   job.status = "done";
   job.result = {
     app_id: "mock_" + Math.random().toString(36).slice(2, 9),

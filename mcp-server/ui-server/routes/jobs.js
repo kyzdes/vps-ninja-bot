@@ -11,17 +11,20 @@ const {
 } = require("../lib/jobs");
 const { listServerNames } = require("../lib/exec");
 
-/* Choose worker:
-   - DOKPILOT_WORKER=mock  → lib/mock-worker.js (deterministic demo loop, no
-                              Claude required, doesn't actually deploy)
-   - DOKPILOT_WORKER=claude → lib/claude-worker.js (default: spawns real
-                              Claude with deploy-guide + helpers; does an
-                              actual deploy)
-   Both are detached + unref'd so the ui-server can restart without
-   killing in-flight workers. */
+/* Choose worker (WS1 / D-019 — two-phase by default):
+   - DOKPILOT_WORKER=mock   → lib/mock-worker.js   (deterministic demo loop, no
+                               Claude required, doesn't actually deploy)
+   - DOKPILOT_WORKER=claude → lib/claude-worker.js (Phase B ONLY — resume/back-compat
+                               of a job that already carries a manifest; skips analysis)
+   - default                → lib/analyze-worker.js (Phase A: read-only analyze → emit
+                               validated manifest → spawn Phase B claude-worker.js)
+   All are detached + unref'd so the ui-server can restart without killing
+   in-flight workers. The worker is spawned WITHOUT the ui-server bearer token. */
 function spawnWorker(id) {
-  const which = process.env.DOKPILOT_WORKER || "claude";
-  const file = which === "mock" ? "mock-worker.js" : "claude-worker.js";
+  const which = process.env.DOKPILOT_WORKER || "analyze";
+  const file = which === "mock" ? "mock-worker.js"
+    : which === "claude" ? "claude-worker.js"   // Phase B only (resume/back-compat)
+    : "analyze-worker.js";                        // default: two-phase (Phase A → B)
   const workerPath = path.join(__dirname, "..", "lib", file);
   const child = spawn(process.execPath, [workerPath, id], {
     detached: true,

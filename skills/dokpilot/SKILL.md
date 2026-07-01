@@ -487,16 +487,34 @@ Key improvements in v3.1:
 - The deploy report should mention: "Auto-deploy is active via GitHub App. Push to `<branch>` to trigger redeploy."
 - If user asks to redeploy, use `application.redeploy` API endpoint
 
-**`/dokpilot deploy --job <id>`** — worker mode (v4.0+).
+**`/dokpilot deploy --job <id>`** — worker mode (v4.0+; **two-phase since v4.4 / D-019**).
 
-When invoked with `--job`, you are a backgrounded deploy worker driven by the dashboard's job queue. The job spec is at `$JOB_PATH` (env var). Use the helpers under `$HELPERS_DIR` (also env):
+The dashboard's `POST /api/jobs/deploy` spawns a **two-phase** worker (never the app repo as instructions):
 
-- `update-status.sh <state>` — lifecycle transitions
+- **Phase A — analyze (read-only):** `mcp-server/ui-server/lib/analyze-worker.js` runs
+  `scripts/scan-repo.sh` (shallow throwaway clone, reads no file contents) then a Claude under
+  `--permission-mode default` with **only** Read/Grep/Glob (MCP stripped, no `--add-dir` of the
+  repo) that emits a **stack manifest**. `lib/manifest.js` `validateManifest()` is the single
+  trust boundary: it strips injected keys, rejects value-bearing env entries (D-012), and FLAGS
+  (never runs) freeform/metachar build/start commands. On success it writes a `0600` manifest
+  file and spawns Phase B **without** the ui-server token.
+- **Phase B — deploy (`bypassPermissions`, infra only):** `lib/claude-worker.js` consumes the
+  validated manifest as the **source of truth** and **never re-reads the repo**. It runs the
+  Dokploy tRPC + Cloudflare DNS flow behind the mandatory plan-then-confirm gate, surfacing any
+  flagged commands for human review. Phase A's cost is summed into the final `cost_usd`.
+
+When invoked manually with `--job`, you are a backgrounded worker; the job spec is at `$JOB_PATH`
+(env) and helpers are under `$HELPERS_DIR`:
+
+- `update-status.sh <state>` — lifecycle transitions (`analyzing-repo | analyzing-stack | awaiting-answers | deploying | wait-dns | finalizing | done | error`)
 - `log.sh <kind> "<message>"` — append a log line
 - `ask-user.sh <id> "<label>" <type> "<extra>" "<hint>"` — blocking question
 - `set-result.sh key=value ...` — final result
 
-The full worker prompt + helper protocol is in `mcp-server/ui-server/lib/claude-worker.js`. The dashboard's `POST /api/jobs/deploy` already spawns this flow automatically — manual `/dokpilot deploy --job <id>` is only for restarting or debugging a stuck job.
+Guard text shared by both phases is in `lib/worker-guard.js`. `DOKPILOT_WORKER=mock` runs the
+demo loop (`lib/mock-worker.js`); `DOKPILOT_WORKER=claude` runs Phase B directly (resume/back-compat
+of a job that already carries a manifest). Manual `/dokpilot deploy --job <id>` is only for
+restarting or debugging a stuck job.
 
 ### `/dokpilot ui` — Launch local web dashboard
 

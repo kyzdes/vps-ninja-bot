@@ -3,7 +3,7 @@
 # Also flips the matching step's status (active for new, done for previous active).
 #
 # Usage: update-status.sh <new-status>
-#   States: analyzing-stack | awaiting-answers | deploying | wait-dns | finalizing | done | error
+#   States: analyzing-repo | analyzing-stack | awaiting-answers | deploying | wait-dns | finalizing | done | error
 
 source "$(dirname "$0")/_jq-patch.sh"
 
@@ -11,6 +11,7 @@ NEW="${1:?Usage: update-status.sh <new-status>}"
 
 # Map status → which step is now "active"
 case "$NEW" in
+  analyzing-repo)    STEP="analyze" ;;
   analyzing-stack)   STEP="detect" ;;
   awaiting-answers)  STEP="questions" ;;
   deploying)         STEP="deploy" ;;

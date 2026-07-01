@@ -7,9 +7,9 @@
 
    File schema (versioned for forward compat):
    {
-     schemaVersion: 1,
+     schemaVersion: 2,
      id, created_at, updated_at,
-     status: "pending|analyzing-stack|awaiting-answers|deploying|wait-dns|finalizing|done|error",
+     status: "pending|analyzing-repo|analyzing-stack|awaiting-answers|deploying|wait-dns|finalizing|done|error",
      repo, branch, server, domain,
      steps: [{id, label, status, duration_ms?}],
      questions: [{id, label, type, options?, hint?, required, answer?}],
@@ -17,7 +17,17 @@
      result: { app_id, url, ... } | null,
      error: string | null,
      worker: { pid, started_at, host } | null,
+     manifest: <validated stack manifest> | null,          // v2 (WS1/D-019)
+     manifest_validation: { ok, flags, errors } | null,     // v2
+     cost_phase_a: number | null,                           // v2: Phase A cost (summed into cost_usd by Phase B)
    }
+
+   v2 (two-phase worker, WS1 / D-019): a read-only Phase A (analyze-worker.js)
+   distills the untrusted repo into `manifest`; Phase B (claude-worker.js) actuates
+   infra from the manifest ONLY. Old v1 jobs (no manifest field) still load and
+   resume — Phase B falls back to a degraded, repo-free path.
+
+   Test/CI: JOBS_DIR honors DOKPILOT_JOBS_DIR for hermetic runs (T33).
 */
 "use strict";
 
@@ -25,7 +35,10 @@ const fs   = require("node:fs");
 const path = require("node:path");
 const os   = require("node:os");
 
-const JOBS_DIR = path.join(os.homedir(), ".claude", "skills", "dokpilot", "jobs");
+// JOBS_DIR is overridable via DOKPILOT_JOBS_DIR so tests/CI can run hermetically
+// against a throwaway dir instead of the user's real ~/.claude jobs (T33).
+const JOBS_DIR = process.env.DOKPILOT_JOBS_DIR
+  || path.join(os.homedir(), ".claude", "skills", "dokpilot", "jobs");
 
 function ensureDir() {
   fs.mkdirSync(JOBS_DIR, { recursive: true, mode: 0o700 });
@@ -80,13 +93,14 @@ function createJob({ repo, server, branch = "main", domain = null }) {
   const id = newJobId();
   const now = new Date().toISOString();
   const job = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id,
     created_at: now,
     updated_at: now,
     status: "pending",
     repo, branch, server, domain,
     steps: [
+      { id: "analyze",   label: "Analyze repo",   status: "pending" },
       { id: "detect",    label: "Detect stack",   status: "pending" },
       { id: "questions", label: "Await answers",  status: "pending" },
       { id: "deploy",    label: "Deploying",      status: "pending" },
@@ -100,6 +114,10 @@ function createJob({ repo, server, branch = "main", domain = null }) {
     result: null,
     error: null,
     worker: null,
+    // v2 (WS1/D-019): populated by Phase A (analyze-worker.js). null until then.
+    manifest: null,
+    manifest_validation: null,
+    cost_phase_a: null,
   };
   writeJob(job);
   return job;
