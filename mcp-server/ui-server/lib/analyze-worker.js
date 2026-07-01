@@ -31,6 +31,7 @@ const fs   = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { readJob, writeJob, jobPath } = require("./jobs");
+const { preflightClaude } = require("./claude-preflight");
 const { validateManifest } = require("./manifest");
 const { GUARD, PHASE_A_ADDENDUM } = require("./worker-guard");
 
@@ -205,7 +206,17 @@ function failJob(id, message, kind) {
   const job = readJob(id);
   if (!job) return;
   job.status = "error";
-  job.error = message;
+  // DEP-3: surface the tail of claude.log so a mid-run worker failure (auth wall,
+  // a crash inside claude) is actionable in the dashboard, not just "check the log".
+  let full = message;
+  try {
+    const logPath = jobPath(id).replace(/\.json$/, ".claude.log");
+    if (fs.existsSync(logPath)) {
+      const tail = fs.readFileSync(logPath, "utf8").split("\n").filter(Boolean).slice(-15).join("\n");
+      if (tail) full = message + "\n\n--- claude.log (last lines) ---\n" + tail;
+    }
+  } catch { /* best-effort */ }
+  job.error = full;
   appendLog(job, "error", (kind || "Phase A failed") + ": " + message);
   writeJob(job);
 }
@@ -216,6 +227,11 @@ async function main() {
 
   const job0 = readJob(id);
   if (!job0) { console.error("job not found:", id); process.exit(2); }
+
+  // Preflight: a deploy spawns a headless `claude`. If the CLI is missing, fail
+  // cleanly with an actionable hint instead of a half-started, timing-out job.
+  const pf = await preflightClaude();
+  if (!pf.ok) { failJob(id, pf.hint || "the `claude` CLI is unavailable", "Preflight"); return; }
 
   const JOB_FILE  = jobPath(id);
   const CLAUDE_LOG = JOB_FILE.replace(/\.json$/, ".claude.log");

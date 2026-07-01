@@ -7,5 +7,8 @@
   "main": "server.js",
   "engines": {
     "node": ">=20"
+  },
+  "scripts": {
+    "test": "node lib/manifest.test.js && node lib/destroy-nonce.test.js && node lib/verify-deploy.test.js && node test/harness.js && node smoke.js --ci"
   }
 }
