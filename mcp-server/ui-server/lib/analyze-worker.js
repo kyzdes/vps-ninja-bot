@@ -297,6 +297,7 @@ async function main() {
     // Surface the outcome + any flags on the dashboard log.
     {
       const j = readJob(id);
+      if (!j) return;
       appendLog(j, "ok", `Manifest: stack=${v.manifest.stack} port=${v.manifest.port ?? "n/a"} build=${v.manifest.build_type} db=[${v.manifest.db_needs.join(",")}]`);
       for (const f of v.flags) appendLog(j, "warn", f);
       // Hand off: analyze done, detect (plan) becomes active; Phase B drives the rest.

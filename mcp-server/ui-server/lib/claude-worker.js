@@ -74,7 +74,10 @@ function resolveManifest({ env, job }) {
     try {
       if (fs.existsSync(mp)) {
         const m = JSON.parse(fs.readFileSync(mp, "utf8"));
-        if (m && typeof m === "object" && !Array.isArray(m)) return { manifest: m, source: "manifest-path" };
+        if (m && typeof m === "object" && !Array.isArray(m)) {
+          try { fs.unlinkSync(mp); } catch { /* best-effort cleanup of the 0600 handoff file */ }
+          return { manifest: m, source: "manifest-path" };
+        }
       }
     } catch { /* fall through to job.manifest */ }
   }

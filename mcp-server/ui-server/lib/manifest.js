@@ -54,6 +54,21 @@ function capStr(v, max) {
   if (typeof v !== "string") return null;
   return v.length > max ? v.slice(0, max) : v;
 }
+// Neutralize a free-text field before it can be inlined into a downstream (Phase B)
+// prompt: collapse control chars / newlines to spaces and strip characters that
+// could frame an injected instruction (backticks, angle brackets, ${ / $( ).
+// Names-only text like "Next.js 15" is unaffected; a compromised Phase A cannot
+// break notes/framework out of a single data line into a directive.
+function sanitizeText(v, max) {
+  const s = capStr(v, max);
+  if (s == null) return null;
+  return s
+    .replace(/[\x00-\x1F\x7F]+/g, " ")
+    .replace(/[`<>]/g, "")
+    .replace(/\$[({]/g, "$ ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 /**
  * Validate + sanitize a manifest object parsed from Phase A's output.
@@ -74,7 +89,7 @@ function validateManifest(raw) {
   if (!STACKS.has(raw.stack)) flags.push(`stack "${String(raw.stack).slice(0, 40)}" not recognized -> unknown`);
 
   // ── framework (free string, capped, optional) ─────────────────────────
-  out.framework = raw.framework == null ? null : capStr(String(raw.framework), MAX_STR);
+  out.framework = raw.framework == null ? null : sanitizeText(String(raw.framework), MAX_STR);
 
   // ── port (1..65535 or null) ───────────────────────────────────────────
   const p = Number(raw.port);
@@ -139,7 +154,7 @@ function validateManifest(raw) {
   }
 
   // ── notes (capped free text) ──────────────────────────────────────────
-  out.notes = raw.notes == null ? "" : capStr(String(raw.notes), MAX_NOTES);
+  out.notes = raw.notes == null ? "" : (sanitizeText(String(raw.notes), MAX_NOTES) || "");
 
   // Record which build/start commands were flagged so callers don't re-derive it.
   out.flagged_commands = flags.filter(f => /build_cmd|start_cmd/.test(f));
