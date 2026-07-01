@@ -9,7 +9,11 @@
    {
      schemaVersion: 2,
      id, created_at, updated_at,
-     status: "pending|analyzing-repo|analyzing-stack|awaiting-answers|deploying|wait-dns|finalizing|done|error",
+     status: "pending|analyzing-repo|analyzing-stack|awaiting-answers|deploying|wait-dns|finalizing|done|done-unconfirmed|error",
+       // done-unconfirmed (WS3/T18): the worker reported done, but the server's
+       // independent verifyDeployment() could NOT confirm the latest Dokploy
+       // deployment was terminal-success — an honest amber terminal state, not
+       // green. Carries job.verification = { confirmed, latest_status, checked_at, reason }.
      repo, branch, server, domain,
      steps: [{id, label, status, duration_ms?}],
      questions: [{id, label, type, options?, hint?, required, answer?}],
@@ -174,7 +178,9 @@ function planPrune(policy) {
     older_than_days:   Number.isFinite(+policy?.older_than_days)   ? +policy.older_than_days   : 0,
   };
   const all = listJobs().sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-  const TERMINAL = new Set(["done", "error"]);
+  // done-unconfirmed (WS3) is a terminal state — it must be prunable, never
+  // treated as an in-flight job the policy would keep forever.
+  const TERMINAL = new Set(["done", "error", "done-unconfirmed"]);
   const cutoff = p.older_than_days > 0 ? Date.now() - p.older_than_days * 24 * 3600 * 1000 : -Infinity;
 
   let doneKept = 0, errorKept = 0;
@@ -185,7 +191,7 @@ function planPrune(policy) {
     const ageMs = j.created_at ? Date.now() - Date.parse(j.created_at) : 0;
     const tooOld = j.created_at && Date.parse(j.created_at) < cutoff;
     if (tooOld) { del.push(j.id); continue; }
-    if (j.status === "done") {
+    if (j.status === "done" || j.status === "done-unconfirmed") {
       if (doneKept < p.keep_recent_done) { keep.push(j.id); doneKept++; }
       else del.push(j.id);
     } else { // error

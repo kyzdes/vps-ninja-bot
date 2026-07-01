@@ -28,6 +28,9 @@ function logLine(t, kind, text) {
    hooks: {
      onJob(job, newLogLines)  // every update; newLogLines = log entries since last tick
      onDone(job), onError(job)// fired ONCE when status first goes terminal
+     onUnconfirmed(job)       // WS3: fired ONCE on status 'done-unconfirmed'
+                              // (server couldn't confirm the deploy). Falls back
+                              // to onDone when a page doesn't supply it.
      onCost(job)              // fired once the worker's trailing cost_usd lands
      onNotFound(), onStreamError()
    }
@@ -78,11 +81,17 @@ function subscribeJob(jobId, token, hooks) {
     const newLines = lines.slice(n);
     n = lines.length;
     if (h.onJob) h.onJob(job, newLines);
-    const terminal = job.status === "done" || job.status === "error";
+    const terminal = job.status === "done" || job.status === "error" || job.status === "done-unconfirmed";
     if (terminal && !terminalFired) {
       terminalFired = true;
-      if (job.status === "done") { if (h.onDone) h.onDone(job); }
-      else if (h.onError) h.onError(job);
+      if (job.status === "error") { if (h.onError) h.onError(job); }
+      else if (job.status === "done-unconfirmed") {
+        // WS3: honest amber path. Fall back to onDone so pages that don't
+        // handle it (e.g. onboarding) still show a terminal result.
+        const fn = h.onUnconfirmed || h.onDone;
+        if (fn) fn(job);
+      }
+      else { if (h.onDone) h.onDone(job); }
       // Kick the bounded fallback poll in case the SSE closes before cost lands.
       if (h.onCost) setTimeout(() => pollCost(0), 3000);
     }

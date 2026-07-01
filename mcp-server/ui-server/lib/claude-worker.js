@@ -27,6 +27,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { readJob, writeJob, jobPath } = require("./jobs");
 const { GUARD } = require("./worker-guard");
+const { verifyDeployment } = require("./verify-deploy");
 
 const REPO_ROOT   = path.resolve(__dirname, "..", "..", "..");
 const SKILL_DIR   = path.join(REPO_ROOT, "skills", "dokpilot");
@@ -330,6 +331,26 @@ function main() {
         final.log = final.log || [];
         final.log.push({ t: new Date().toTimeString().slice(0, 8), kind: "error", text: final.error });
       }
+
+      // WS3 (T18): server-side deploy verification. The WORKER reports `done`;
+      // the SERVER independently CONFIRMS it via Dokploy `deployment.all`. If we
+      // can't confirm the latest deployment is terminal-success, downgrade to an
+      // honest `done-unconfirmed` (amber) rather than a celebratory green we
+      // can't stand behind. verifyDeployment never throws.
+      if (final.status === "done") {
+        const v = await verifyDeployment(final);
+        final.verification = { confirmed: v.confirmed, latest_status: v.latest_status, checked_at: v.checked_at, reason: v.reason };
+        if (!v.confirmed) {
+          final.status = "done-unconfirmed";
+          final.log = final.log || [];
+          final.log.push({
+            t: new Date().toTimeString().slice(0, 8),
+            kind: "warn",
+            text: "Could not independently confirm this deploy — check the app. (" + v.reason + ")",
+          });
+        }
+      }
+
       writeJob(final);
     }
     process.exit(spawnErr ? 1 : (code || 0));

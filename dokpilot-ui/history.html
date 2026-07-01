@@ -73,8 +73,9 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
     return new Date(iso).toLocaleDateString();
   }
 
-  // in-flight = anything not in {done, error}
-  const TERMINAL = new Set(["done", "error"]);
+  // in-flight = anything not terminal. done-unconfirmed (WS3) is terminal too —
+  // omitting it would mislabel a finished-but-unconfirmed deploy as in-flight.
+  const TERMINAL = new Set(["done", "error", "done-unconfirmed"]);
   function filterJobs() {
     if (filter === "all")   return allJobs;
     if (filter === "done")  return allJobs.filter(j => j.status === "done");
@@ -87,6 +88,7 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
     // Map status to the existing badge palette
     const map = {
       "done": "ok",
+      "done-unconfirmed": "warn",
       "error": "danger",
       "pending": "info",
       "analyzing-stack": "info",

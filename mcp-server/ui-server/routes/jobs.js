@@ -242,7 +242,10 @@ function streamJob(req, res, ctx, params) {
       return;
     }
     stream.send("job", j);
-    if (j.status === "done" || j.status === "error") {
+    // Terminal states close the stream after a short grace. `done-unconfirmed`
+    // (WS3) is terminal too — if it's omitted here the SSE never closes on an
+    // unconfirmed deploy and the UI hangs forever waiting for a close event.
+    if (j.status === "done" || j.status === "error" || j.status === "done-unconfirmed") {
       // cost present → close promptly; not yet → wait up to 8s for the
       // trailing write (fs.watch re-emits with cost in between).
       scheduleClose("terminal", j.cost_usd != null ? 400 : 8000);

@@ -15,9 +15,11 @@
      6. BACK-COMPAT: a v1 "deploying" job with no manifest field resumes under v2 (degraded)
         without crashing.
      7. UNIT: resolveManifest() precedence (MANIFEST_PATH → job.manifest → degraded).
+     8. WS3/DP-35: verifyDeployment() injected-stub cases — the server-side confirm that
+        decides whether the finalizer keeps `done` or downgrades to `done-unconfirmed`.
 
-   TODO (WS3): verify-done assertions (reachability / cert / DNS correctness) belong to the
-   verify-done work — this file only proves the lifecycle + trust-boundary arg wiring.
+   (The exhaustive verify matrix lives in lib/verify-deploy.test.js; these prove the
+   deploy-path contract: confirmed:true keeps done, confirmed:false ⇒ done-unconfirmed.)
 */
 "use strict";
 
@@ -189,6 +191,41 @@ function register({ test, assert }) {
     } finally {
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* noop */ }
     }
+  });
+
+  /* ── 8. WS3/DP-35: verifyDeployment injected-stub cases ──────────────────
+     Proves the server-side confirm gate that claude-worker's finalize consumes:
+       confirmed:true   -> the job stays `done`
+       confirmed:false  -> the job is downgraded to `done-unconfirmed` (amber). */
+  const vjob = () => ({ server: "main", result: { app_id: "app1", url: "https://x" } });
+
+  test("verify(stub): latest deployment done -> confirmed:true (worker keeps status `done`)", async () => {
+    const { verifyDeployment } = require(path.join(LIB, "verify-deploy.js"));
+    const v = await verifyDeployment(vjob(), async () => [{ status: "done", createdAt: "2026-01-01T00:00:00Z" }]);
+    assert.strictEqual(v.confirmed, true, "done deployment confirms");
+    assert.strictEqual(v.latest_status, "done");
+  });
+
+  test("verify(stub): latest deployment NOT done -> confirmed:false (finalize downgrades to `done-unconfirmed`)", async () => {
+    const { verifyDeployment } = require(path.join(LIB, "verify-deploy.js"));
+    const v = await verifyDeployment(vjob(), async () => [{ status: "running", createdAt: "2026-01-01T00:00:00Z" }]);
+    assert.strictEqual(v.confirmed, false, "non-done deployment cannot confirm");
+    assert.strictEqual(v.latest_status, "running");
+  });
+
+  test("verify(stub): transport __error -> confirmed:false (one retry, honest amber)", async () => {
+    const { verifyDeployment } = require(path.join(LIB, "verify-deploy.js"));
+    let calls = 0;
+    const v = await verifyDeployment(vjob(), async () => { calls++; return { __error: true, code: 124, timedOut: true }; });
+    assert.strictEqual(v.confirmed, false);
+    assert.strictEqual(calls, 2, "retried exactly once before giving up");
+  });
+
+  test("verify(stub): non-array {ok:true} (KI-022 empty body) -> confirmed:false", async () => {
+    const { verifyDeployment } = require(path.join(LIB, "verify-deploy.js"));
+    const v = await verifyDeployment(vjob(), async () => ({ ok: true }));
+    assert.strictEqual(v.confirmed, false);
+    assert.ok(/non-array/.test(v.reason), "reason names non-array: " + v.reason);
   });
 }
 

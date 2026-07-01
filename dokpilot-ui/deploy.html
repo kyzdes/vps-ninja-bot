@@ -279,6 +279,7 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
     let qaCard = null;
     let renderedLogLen = 0;
     let terminalToasted = false; // guard double-toast across onDone + onCost re-render
+    let jobId = null;            // captured after creation — used by Re-check
 
     function syncLog(job) {
       // Append only new lines
@@ -387,6 +388,47 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
       wrap.insertBefore(errBanner, logCard);
     }
 
+    /* ── WS3: done-unconfirmed — honest amber result ─────────────────────
+       The worker finished, but the SERVER could not independently confirm the
+       deploy's latest Dokploy deployment was terminal-success. We show an amber
+       card (NOT the green success one): the URL to eyeball, Open, and Re-check
+       (re-pulls the authoritative job state — no side effects). */
+    function renderUnconfirmed(job) {
+      const url = job.result?.url || ("https://" + (job.domain || repo.split("/").pop() + ".kyzdes.dev"));
+      wrap.innerHTML = "";
+      const simple = document.documentElement.dataset.mode === "simple";
+      // Stepper: build + ship done, but mark Finalize as unconfirmed (amber, not green tick).
+      renderStepper(simple ? 2 : 4, simple ? 2 : 4, simple ? 2 : 4);
+      if (!terminalToasted) { terminalToasted = true; toast("Deploy finished — couldn't confirm it's live", "warn", true); }
+      const reason = job.verification?.reason || job.verification?.latest_status || "the latest deployment wasn't confirmed done";
+      async function recheck() {
+        if (!jobId || !window.__DOKPILOT_TOKEN__) { toast("Nothing to re-check", "warn", true); return; }
+        try {
+          const d = await fetch("/api/jobs/" + encodeURIComponent(jobId), {
+            credentials: "include", headers: { "Authorization": "Bearer " + window.__DOKPILOT_TOKEN__ },
+          }).then((r) => r.json());
+          if (d && d.job) { d.job.status === "done" ? renderDone(d.job) : renderUnconfirmed(d.job); }
+        } catch (e) { toast("Re-check failed — try again", "warn", true); }
+      }
+      wrap.append(el("section", { class:"card card-pad", style:{textAlign:"center",borderColor:"color-mix(in oklab,var(--warn),transparent 60%)",background:"var(--warn-soft)"} },
+        el("div", { style:{width:"52px",height:"52px",margin:"8px auto 16px",borderRadius:"50%",background:"var(--warn-soft)",color:"var(--warn)",display:"grid",placeItems:"center",border:"1px solid color-mix(in oklab,var(--warn),transparent 45%)"} }, icon("warn", 26)),
+        el("h2", { style:{fontSize:"var(--text-3xl)"} }, el("span",{ "data-adv":"" },"Deploy unconfirmed"), el("span",{ "data-simple":"" },"Almost — please check it")),
+        el("p", { class:"page-lead", style:{margin:"8px auto 6px"} },
+          el("span",{ "data-adv":"" }, "The worker finished, but we couldn't independently confirm the deploy is live. Open the app to check it yourself, then re-check."),
+          el("span",{ "data-simple":"" }, "Your app finished building, but we couldn't confirm it's really up. Open it to see, then re-check.")),
+        el("p", { class:"hint", style:{margin:"0 auto 18px"} }, reason),
+        el("div", { class:"codeblock", style:{maxWidth:"480px",margin:"0 auto 20px"} },
+          icon("globe", 14), el("span", { class:"grow" }, url),
+          el("button", { class:"icon-btn", "data-copy":url, title:"Copy" }, icon("copy", 14))),
+        job.cost_usd != null
+          ? el("p", { class:"hint", style:{margin:"-10px auto 18px"} }, "≈$" + Number(job.cost_usd).toFixed(2) + " Claude usage (on your plan)")
+          : null,
+        el("div", { class:"row", style:{justifyContent:"center",gap:"10px"} },
+          el("a", { class:"btn btn-primary", href:url, target:"_blank" }, "Open", icon("ext", 13)),
+          el("button", { class:"btn", onclick:recheck }, icon("refresh", 13), "Re-check"),
+          el("button", { class:"btn btn-ghost", onclick:renderForm }, "Deploy another"))));
+    }
+
     // ── Kick the job ──
     try {
       const csrfToken = window.__DOKPILOT_TOKEN__;
@@ -404,6 +446,7 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
         cursor.querySelector(".log-text").textContent = "Failed to start: HTTP " + res.status;
         return;
       }
+      jobId = res.id;
       headerJobIdSpan.textContent = "job " + res.id;
 
       // Subscribe via the shared deploy-flow module (SSE + log-index diffing
@@ -412,8 +455,14 @@ window.pageInit = ({ el, icon, badge, toast, DATA }) => {
         onJob: (job) => { syncLog(job); syncStepper(job); syncQA(job); },
         onDone: (job) => renderDone(job),
         onError: (job) => renderError(job),
-        // Trailing cost_usd arrives after terminal — re-render the right card.
-        onCost: (job) => (job.status === "done" ? renderDone(job) : renderError(job)),
+        // WS3: honest amber terminal — the server couldn't confirm the deploy.
+        onUnconfirmed: (job) => renderUnconfirmed(job),
+        // Trailing cost_usd arrives after terminal — re-render the right card
+        // (route by the AUTHORITATIVE status, incl. the done→done-unconfirmed
+        // downgrade the finalizer may have written after the worker's `done`).
+        onCost: (job) => (job.status === "done" ? renderDone(job)
+          : job.status === "done-unconfirmed" ? renderUnconfirmed(job)
+          : renderError(job)),
         onNotFound: () => { cursor.querySelector(".log-text").textContent = "Job vanished from queue."; },
       });
     } catch (err) {

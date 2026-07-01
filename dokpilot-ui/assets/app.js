@@ -86,14 +86,19 @@ const KIND = {
   error:"danger", failed:"danger", down:"danger",
   stopped:"muted", pending:"muted", paused:"muted",
   "awaiting-answers":"warning", asking:"warning", warn:"warning",
+  // WS3: worker reported done but the server couldn't independently confirm the
+  // deploy — honest amber (warning), NEVER a celebratory green.
+  "done-unconfirmed":"warning",
 };
 const PRO_LABEL = {
   running:"running", healthy:"healthy", success:"success", building:"building", error:"error",
   stopped:"stopped", "awaiting-answers":"awaiting answers", live:"running", paused:"paused", deploying:"deploying",
+  "done-unconfirmed":"done · unconfirmed",
 };
 const SIMPLE_LABEL = {
   running:"Live", healthy:"Online", success:"Done", building:"Building…", error:"Needs attention",
   stopped:"Off", "awaiting-answers":"Needs you", live:"Live", paused:"Paused", deploying:"Deploying…",
+  "done-unconfirmed":"Check it",
 };
 const badge = (status) => {
   const k = KIND[status] || "muted";
@@ -561,7 +566,8 @@ async function bootData() {
   // when we're live we don't want a stale MOCK seed flashing in there.
   const jobsP = api("/api/jobs").then((r) => {
     if (r.__error || !Array.isArray(r.jobs)) return;
-    const active = r.jobs.find(j => j.status && j.status !== "done" && j.status !== "error");
+    // done-unconfirmed (WS3) is terminal — don't surface it as an in-flight deploy.
+    const active = r.jobs.find(j => j.status && j.status !== "done" && j.status !== "error" && j.status !== "done-unconfirmed");
     if (active) {
       // Hydrate the full job state so the card has questions/log too
       api(`/api/jobs/${active.id}`).then((full) => {

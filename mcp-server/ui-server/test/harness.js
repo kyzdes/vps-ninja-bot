@@ -26,6 +26,7 @@ function test(name, fn) { tests.push({ name, fn }); }
 
 // Load the suites (register pattern — no circular require).
 require("./deploy-path.e2e.js").register({ test, assert });
+require("../lib/verify-deploy.test.js").register({ test, assert });
 
 (async () => {
   const results = [];
