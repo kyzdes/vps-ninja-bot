@@ -8,22 +8,48 @@
 
 ## Install
 
-### Claude Code
+Dokpilot is a **local, single-user** skill — it runs on your machine, uses your
+credentials, and deploys to **your** VPS. There is no hosted service.
 
-    /plugin install https://github.com/kyzdes/dokpilot
-    # or via marketplace:
-    /plugin marketplace add kyzdes/marketplace-skills
-    /plugin install dokpilot@kyzdes-skills
+### Prerequisites
 
-### Codex CLI / Gemini CLI
+- **Node.js 20+** (runs the local dashboard, standard-library only)
+- **jq** and **sshpass** — `brew install jq sshpass` (macOS) / `sudo apt install -y jq sshpass` (Ubuntu/Debian)
+- **git**, and a **VPS** you control (2 GB RAM / 30 GB disk minimum)
+- Optional: a **Cloudflare** token for DNS + SSL
 
-    curl -sSL https://raw.githubusercontent.com/kyzdes/marketplace-skills/main/install.sh \
-      | bash -s <codex|gemini> dokpilot
+**Platform support:** on **macOS**, Dokploy/Cloudflare secrets live in the system
+**Keychain** and `servers.json` holds only `{_secret}` references. On
+**Linux / non-macOS** there is no OS keystore, so secrets are stored as
+**plaintext** in `servers.json` (mode `0600`) with a loud warning — keep that
+file private and never commit it.
 
-## Updates
+### Mode B — clone + symlink (primary)
 
-Claude: `/plugin update dokpilot`
-Codex/Gemini: `install.sh update <agent>`
+```bash
+git clone https://github.com/kyzdes/dokpilot.git ~/dokpilot
+mkdir -p ~/.claude/skills
+# the skill lives in the skills/dokpilot subfolder of the repo:
+ln -s ~/dokpilot/skills/dokpilot ~/.claude/skills/dokpilot
+```
+
+Launch the dashboard with `/dokpilot ui` (see [Dashboard](#dashboard-new-in-v40)).
+The skill locates its own scripts and references via self-location, so the
+symlink target is what matters.
+
+### Mode A — marketplace (coming soon)
+
+Once a `dokpilot` entry lands in the `kyzdes/claude-skills` marketplace:
+
+```
+/plugin marketplace add kyzdes/claude-skills
+/plugin install dokpilot@claude-skills
+```
+
+Until then, use **Mode B**.
+
+Full walkthrough (add server → secret store → first deploy):
+[`skills/dokpilot/references/install.md`](skills/dokpilot/references/install.md).
 
 ---
 
@@ -83,38 +109,30 @@ Full results: [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md)
 
 ## Quick Start
 
-### 1. Install the skill
+Install the skill first (see [Install](#install)), then:
 
-```bash
-git clone https://github.com/kyzdes/dokpilot.git ~/dokpilot
-ln -s ~/dokpilot ~/.claude/skills/dokpilot
-```
-
-### 2. Install dependencies
-
-```bash
-# macOS
-brew install jq sshpass
-
-# Ubuntu/Debian
-sudo apt install jq sshpass
-```
-
-### 3. Set up your VPS
+### 1. Set up your VPS
 
 ```
 /dokpilot setup <server-ip> <root-password>
 ```
 
-Claude SSHs in, installs Dokploy, configures the firewall, and walks you through creating an admin account.
+Claude SSHs in, installs Dokploy, configures the firewall, and walks you through
+creating an admin account + generating a Dokploy API key.
 
-### 4. Deploy
+### 2. Deploy
 
 ```
 /dokpilot deploy github.com/user/app --domain app.example.com
 ```
 
-Claude detects your stack, creates the project in Dokploy, sets up DNS + SSL, deploys, and enables auto-deploy on push. Done.
+Dokpilot **analyzes** the repo read-only, shows you a plan, and — after you
+confirm — creates the project in Dokploy, sets up DNS + SSL, deploys, and
+enables auto-deploy on push. See [How It Works](#how-it-works) for the
+two-phase detail.
+
+Full onboarding walkthrough:
+[`skills/dokpilot/references/install.md`](skills/dokpilot/references/install.md).
 
 ---
 
@@ -180,22 +198,38 @@ Auto-detected from your project files:
 
 ## How It Works
 
+Deploy runs in **two phases** with a human gate in between. The target repo is
+treated as **untrusted input** (see [SECURITY.md](SECURITY.md)).
+
 ```
 You: /dokpilot deploy github.com/user/app --domain app.example.com
 
-Dokpilot:
-  1. Clones repo, detects Next.js + Prisma + PostgreSQL
-  2. Asks for secret env vars (NEXTAUTH_SECRET, etc.)
-  3. Creates project + PostgreSQL in Dokploy
-  4. Connects repo via GitHub App (auto-deploy enabled)
-  5. Sets build type (Nixpacks) with all required API fields
-  6. Creates DNS A-record in CloudFlare (--no-proxy for SSL)
-  7. Adds domain with Let's Encrypt certificate
-  8. Deploys, monitors logs, verifies HTTPS
+── Phase A · ANALYZE (read-only) ───────────────────────────────
+  Shallow-clones the repo into a throwaway dir. A headless agent
+  inspects it with Read / Grep / Glob ONLY (no Bash, no Write, no
+  bypassPermissions) and emits a schema-validated stack manifest
+  (e.g. Next.js + Prisma + PostgreSQL, env-var NAMES, build/start).
+
+── CONFIRM · plan-then-confirm gate ────────────────────────────
+  Dokpilot shows the plan and asks for any secret env vars
+  (NEXTAUTH_SECRET, etc.). Flagged/freeform commands are surfaced
+  here. Nothing infra-changing runs until you confirm.
+
+── Phase B · ACTUATE (infra only) ──────────────────────────────
+  Driven ONLY by the validated manifest (never re-reads the repo):
+    1. Creates project + PostgreSQL in Dokploy
+    2. Connects repo via GitHub App (auto-deploy enabled)
+    3. Sets build type (Nixpacks) with all required API fields
+    4. Creates DNS A-record in Cloudflare (--no-proxy for SSL)
+    5. Adds domain with Let's Encrypt certificate
+    6. Deploys, monitors logs, verifies HTTPS
 
 Result: https://app.example.com is live
         Auto-deploy active — push to main to redeploy
 ```
+
+> This is a **containment** posture, not a sandbox: Phase A has no write/exec
+> capability and the manifest is the only thing crossing into Phase B.
 
 ### Deployment fallback chain
 
@@ -213,63 +247,74 @@ GitHub App (recommended)
 ## Architecture
 
 ```
-dokpilot/
-├── SKILL.md                    # Skill logic and command routing
-├── scripts/
-│   ├── dokploy-api.sh          # Dokploy tRPC API client (dynamic timeouts)
-│   ├── cloudflare-dns.sh       # CloudFlare DNS client (multi-part TLD support)
-│   ├── ssh-exec.sh             # SSH wrapper (normal/bg/poll modes)
-│   └── wait-ready.sh           # URL health checker
-├── references/                 # 7 built-in guides (primary source of truth)
-│   ├── deploy-guide.md         # 3-phase deploy workflow
-│   ├── setup-guide.md          # 10-step VPS setup
-│   ├── stack-detection.md      # Framework detection rules
-│   ├── dokploy-api-reference.md
-│   ├── github-app-autodeploy.md
-│   ├── troubleshooting.md
-│   └── manual-docker-deploy.md
-├── config/
-│   └── servers.json            # Credentials (gitignored)
-├── templates/
-│   └── setup-server.sh         # VPS init script
-├── mcp-server/                 # Optional Dokploy docs MCP server
-└── benchmarks/                 # Eval results and viewer
+dokpilot/                          # this repo
+├── skills/dokpilot/               # the skill itself (symlink target for Mode B)
+│   ├── SKILL.md                   # skill logic + command routing
+│   ├── scripts/                   # Bash core (D-002: shell, not Node)
+│   │   ├── dokploy-api.sh         # Dokploy tRPC client; destroy env-gate
+│   │   ├── cloudflare-dns.sh      # Cloudflare DNS (multi-part TLD support)
+│   │   ├── ssh-exec.sh            # SSH wrapper (normal/bg/poll modes)
+│   │   ├── secret-store.sh        # macOS Keychain wrapper
+│   │   └── wait-ready.sh          # URL health checker
+│   ├── references/                # built-in guides (primary source of truth)
+│   │   ├── install.md             # onboarding walkthrough
+│   │   ├── deploy-guide.md  setup-guide.md  stack-detection.md
+│   │   ├── secrets-management.md  troubleshooting.md  …
+│   ├── config/
+│   │   └── servers.json           # credentials / {_secret} refs (gitignored)
+│   └── templates/                 # VPS init script(s)
+├── mcp-server/ui-server/          # local dashboard backend (Node 20 stdlib, zero-dep)
+│   ├── server.js                  # 127.0.0.1 + bearer token + CSRF + Host allow-list
+│   ├── launch.sh                  # cross-platform launcher (/dokpilot ui)
+│   └── lib/
+│       ├── analyze-worker.js      # Phase A — read-only repo analysis
+│       ├── claude-worker.js       # Phase B — infra-only actuation (manifest-driven)
+│       ├── manifest.js            # the trust-boundary validator
+│       ├── worker-guard.js        # shared hard guard for the workers
+│       └── destroy-nonce.js       # server-minted single-use HMAC for UI deletes
+├── dokpilot-ui/                   # dashboard HTML/CSS/JS (static)
+├── scripts/clean-machine-smoke.sh # throwaway-HOME install smoke (Mode B)
+└── benchmarks/                    # eval results and viewer
 ```
+
+The security-critical boundary is the **manifest**: Phase A (read-only) emits
+it, `lib/manifest.js` validates it, and Phase B acts on *only* that. See
+[SECURITY.md](SECURITY.md).
 
 ---
 
 ## Security
 
-| Measure | Detail |
-|:--------|:-------|
-| Credentials | `servers.json` is gitignored, never committed |
-| Passwords | Passed via `SSHPASS` env var (not visible in `ps`) |
-| SSH | Command injection prevention via single-quote escaping |
-| API keys | Never shown in Claude's responses |
-| Destructive ops | `destroy` and `db delete` always require confirmation |
-| DNS changes | Preview shown before applying |
+> ### ⚠️ What this can do to your machine, servers, and bill
+>
+> Dokpilot is a **real DevOps automation**, not a sandbox. Running as you, it can:
+>
+> - **Your machine:** run local shell, clone arbitrary third-party repos, and
+>   read the secrets you stored for it.
+> - **Your servers:** SSH in (often as `root`) and create, deploy, restart, and
+>   **delete** Dokploy projects, apps, databases, and domains.
+> - **Your DNS:** create/modify Cloudflare records for the zones your token covers.
+> - **Your bill:** each deploy runs a headless `claude` and **spends your own
+>   Claude usage**.
+>
+> **Only point it at repositories and servers you trust.** The full trust
+> boundary, threat model (repo prompt injection), two-phase defense, safety
+> controls, and honest residual risks are in **[SECURITY.md](SECURITY.md)**.
 
----
+### Cost & Privacy
 
-## Optional: MCP Server
-
-Dokpilot includes a bundled MCP server for always-fresh Dokploy documentation:
-
-```bash
-cd ~/.claude/skills/dokpilot/mcp-server && npm install
-```
-
-Add to `~/.claude/.mcp.json`:
-```json
-{
-  "mcpServers": {
-    "dokploy-docs": {
-      "command": "node",
-      "args": ["<path-to>/mcp-server/index.js"]
-    }
-  }
-}
-```
+- **Cost:** every `analyze`/`deploy` consumes your Claude subscription/API
+  usage. Server, bandwidth, and domain costs are billed by your VPS and
+  registrar.
+- **Your data stays yours:** the repo and its env vars go to **your** Dokploy
+  instance over your credentials. Nothing is sent to a Dokpilot-controlled
+  service.
+- **Cloudflare token scope:** grant only **Zone → DNS → Edit** on the specific
+  zone(s) you deploy to — nothing broader.
+- **Local-only storage:** credentials live in your macOS **Keychain** (or a
+  `0600` `servers.json` on Linux, with a loud warning). Secret values are never
+  echoed.
+- **No telemetry:** Dokpilot has no analytics, no phone-home, no accounts.
 
 ---
 
@@ -277,10 +322,12 @@ Add to `~/.claude/.mcp.json`:
 
 | Document | Description |
 |:---------|:------------|
+| [`SECURITY.md`](SECURITY.md) | Trust boundary, threat model, safety controls, residual risks |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute (issues-only support, hard constraints) |
+| [`skills/dokpilot/references/install.md`](skills/dokpilot/references/install.md) | Full onboarding walkthrough |
 | [`PRD.md`](PRD.md) | Product requirements, architecture, all commands |
-| [`CHANGELOG.md`](CHANGELOG.md) | Full version history (v1 → v4.0.0) |
-| [`fixed-errors.md`](fixed-errors.md) | 9 production bugs: root cause + solution |
-| [`context-map.md`](context-map.md) | Technical deep-dive for contributors |
+| [`CHANGELOG.md`](CHANGELOG.md) | Full version history |
+| [`fixed-errors.md`](fixed-errors.md) | Production bugs: root cause + solution |
 | [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md) | Benchmark methodology and results |
 
 ---
@@ -298,10 +345,17 @@ Add to `~/.claude/.mcp.json`:
 
 ---
 
+## Support & Contributing
+
+Solo-maintained, **issues-only** support — no SLA, no Discord, no roadmap
+voting. Found a bug or want a new stack? [Open an issue](https://github.com/kyzdes/dokpilot/issues).
+
+- Contributor guide + hard constraints (Bash core, zero-dep ui-server, never
+  commit `servers.json`/`context-map-*/`): [CONTRIBUTING.md](CONTRIBUTING.md).
+- Security issues: follow responsible disclosure in [SECURITY.md](SECURITY.md)
+  — do not file them as normal public issues.
+
 ## License
 
-MIT
-
-## Contributing
-
-PRs welcome. If you find a bug or want to add support for a new stack, [open an issue](https://github.com/kyzdes/dokpilot/issues).
+[MIT](LICENSE) — provided **"AS IS", without warranty of any kind**. You run
+Dokpilot against your own servers and repos at your own risk.
