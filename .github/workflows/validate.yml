@@ -11,6 +11,13 @@ jobs:
         with:
           node-version: "20"
 
+      - name: No secrets / state files committed
+        run: |
+          if git ls-files | grep -E 'config/servers\.json$|/known_hosts$|\.ui-(pid|port|url)$|ui-server\.log$|/jobs/|/destroy-nonces/'; then
+            echo "::error::a secret/state file is tracked — it belongs in .gitignore"; exit 1; fi
+          if git grep -qlE 'BEGIN (OPENSSH|RSA|EC|DSA|PGP) PRIVATE KEY' -- . 2>/dev/null; then
+            echo "::error::private key material is committed"; exit 1; fi
+
       - name: Check SKILL.md exists
         run: test -f skills/dokpilot/SKILL.md
 
@@ -48,7 +55,7 @@ jobs:
 
       - name: shellcheck
         run: |
-          command -v shellcheck >/dev/null || sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          if ! command -v shellcheck >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; fi
           shellcheck -S warning scripts/*.sh skills/dokpilot/scripts/*.sh mcp-server/ui-server/lib/worker-helpers/*.sh
 
       - name: Check version sync (SSOT = plugin.json)

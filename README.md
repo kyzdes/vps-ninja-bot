@@ -324,9 +324,7 @@ it, `lib/manifest.js` validates it, and Phase B acts on *only* that. See
 | [`SECURITY.md`](SECURITY.md) | Trust boundary, threat model, safety controls, residual risks |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute (issues-only support, hard constraints) |
 | [`skills/dokpilot/references/install.md`](skills/dokpilot/references/install.md) | Full onboarding walkthrough |
-| [`PRD.md`](PRD.md) | Product requirements, architecture, all commands |
 | [`CHANGELOG.md`](CHANGELOG.md) | Full version history |
-| [`fixed-errors.md`](fixed-errors.md) | Production bugs: root cause + solution |
 
 ---
 
