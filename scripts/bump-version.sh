@@ -5,9 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.." || exit 2
 NEW="${1:?usage: bump-version.sh <X.Y.Z>}"
 echo "$NEW" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "bad version: $NEW (want X.Y.Z)"; exit 2; }
-V="v$NEW"
 
-# JSON manifests (SSOT first).
+# JSON manifests (SSOT first). The "v"-prefixed sites are edited by the python below.
 tmp=$(mktemp); jq --arg v "$NEW" '.version=$v' .claude-plugin/plugin.json > "$tmp" && mv "$tmp" .claude-plugin/plugin.json
 tmp=$(mktemp); jq --arg v "$NEW" '.version=$v' gemini-extension.json      > "$tmp" && mv "$tmp" gemini-extension.json
 
