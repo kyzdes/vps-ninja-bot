@@ -43,3 +43,6 @@ skills/dokpilot/.ui-port
 skills/dokpilot/.ui-url
 skills/dokpilot/jobs/
 skills/dokpilot/destroy-nonces/
+
+# recorded evals contain the author's real infra — regenerate clean before shipping public
+benchmarks/

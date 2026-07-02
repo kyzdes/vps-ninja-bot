@@ -103,7 +103,7 @@ We tested Claude with and without Dokpilot across 3 real-world DevOps scenarios:
 
 > **Most revealing test:** When asked about auto-deploy, naked Claude recommends setting up webhooks — the exact opposite of how Dokploy works. Dokpilot correctly explains that the GitHub App handles it automatically.
 
-Full results: [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md)
+> The recorded eval transcripts are being regenerated against a neutral fixture server before public release (the originals referenced the author's own infrastructure).
 
 ---
 
@@ -273,8 +273,7 @@ dokpilot/                          # this repo
 │       ├── worker-guard.js        # shared hard guard for the workers
 │       └── destroy-nonce.js       # server-minted single-use HMAC for UI deletes
 ├── dokpilot-ui/                   # dashboard HTML/CSS/JS (static)
-├── scripts/clean-machine-smoke.sh # throwaway-HOME install smoke (Mode B)
-└── benchmarks/                    # eval results and viewer
+└── scripts/clean-machine-smoke.sh # throwaway-HOME install smoke (Mode B)
 ```
 
 The security-critical boundary is the **manifest**: Phase A (read-only) emits
@@ -328,7 +327,6 @@ it, `lib/manifest.js` validates it, and Phase B acts on *only* that. See
 | [`PRD.md`](PRD.md) | Product requirements, architecture, all commands |
 | [`CHANGELOG.md`](CHANGELOG.md) | Full version history |
 | [`fixed-errors.md`](fixed-errors.md) | Production bugs: root cause + solution |
-| [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md) | Benchmark methodology and results |
 
 ---
 

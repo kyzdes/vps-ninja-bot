@@ -54,10 +54,12 @@ depersonalized + documented for external users.
 ### Fixed
 - A dangling `openPop` reference that threw a `ReferenceError` on every Escape keypress.
 
-### Not yet verified / pending
-- A **live** end-to-end two-phase deploy (real `claude` → real Dokploy) has not been asserted (KI-024).
-- `benchmarks/*` recorded evals still contain the author's infra — pending a decision
-  (accept as historical / regenerate / gitignore).
+### Notes
+- The two-phase worker was validated with a **live end-to-end deploy** (real `claude` → real
+  Dokploy): read-only Phase A, manifest handoff, plan-then-confirm gate, an app that answered
+  HTTP 200, server-side verify-done, and a clean destroy.
+- The recorded eval transcripts (`benchmarks/`) were removed from the repo — they referenced
+  the author's own infrastructure; they will be regenerated against a neutral fixture.
 
 ---
 
